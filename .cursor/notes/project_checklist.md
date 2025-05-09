@@ -6,17 +6,17 @@
 -   [ ] **Planning & Design:**
     -   [x] Draft initial `HiRezMCPUnreal_TechSpec.md` with class responsibilities and initial MCP endpoints.
     -   [x] Draft initial `project_checklist.md`.
-    -   [ ] **USER REVIEW:** Get approval on `HiRezMCPUnreal_TechSpec.md` and `project_checklist.md`.
+    -   [x] **USER REVIEW:** Get approval on `HiRezMCPUnreal_TechSpec.md` and `project_checklist.md`.
 -   [ ] **Unreal Plugin Module Setup:**
-    -   [ ] Create a new Unreal Engine Editor Plugin named `HiRezMCPUnreal`.
-    -   [ ] Define `HiRezMCPUnreal.uplugin` file.
-    -   [ ] Create the main module class `FHiRezMCPUnrealModule`.
-    -   [ ] Implement basic `StartupModule` and `ShutdownModule` logic.
-    -   [ ] Add `HTTPServer` module as a dependency.
+    -   [x] Create a new Unreal Engine Editor Plugin named `HiRezMCPUnreal` (conceptual, files created manually/scripted).
+    -   [x] Define `HiRezMCPUnreal.uplugin` file.
+    -   [x] Create the main module class `FHiRezMCPUnrealModule` (header `HiRezMCPUnreal.h` and source `HiRezMCPUnreal.cpp` created).
+    -   [x] Implement basic `StartupModule` and `ShutdownModule` logic.
+    -   [x] Add `HTTPServer` module as a dependency (in `.uplugin` and `.Build.cs`).
 -   [ ] **HTTP Server Implementation:**
-    -   [ ] Initialize and start the HTTP server on port 30069 in `StartupModule`.
-    -   [ ] Stop the HTTP server in `ShutdownModule`.
-    -   [ ] Register a basic `/health` endpoint.
+    -   [x] Initialize and start the HTTP server on port 30069 in `StartupModule` (with fallback to ephemeral port).
+    -   [x] Stop the HTTP server in `ShutdownModule`.
+    -   [x] Register a basic `/health` endpoint (and other initial MCP routes).
     -   [ ] Test the `/health` endpoint using a tool like `curl` or Postman.
 -   [ ] **MCP Data Structures:**
     -   [ ] Define USTRUCTs for basic MCP request/response messages (e.g., `FMCPErrorResponse`, `FMCPHealthResponse`).

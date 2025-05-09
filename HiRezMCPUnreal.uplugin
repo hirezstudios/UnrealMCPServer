@@ -1,0 +1,25 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "HiRez MCP Unreal",
+  "Description": "Implements an MCP (Model Context Protocol) server within Unreal Engine for AI agent interaction.",
+  "Category": "Hirez.MCP",
+  "CreatedBy": "Hi-Rez Studios / AI Agent",
+  "CreatedByURL": "",
+  "DocsURL": "",
+  "MarketplaceURL": "",
+  "SupportURL": "",
+  "CanContainContent": false,
+  "IsBetaVersion": true,
+  "IsExperimentalVersion": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "HiRezMCPUnreal",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": []
+}
