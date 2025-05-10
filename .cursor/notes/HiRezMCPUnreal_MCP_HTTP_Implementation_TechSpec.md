@@ -1,4 +1,4 @@
-# Technical Specification: HiRezMCPUnreal - MCP Server (HTTP Implementation)
+# Technical Specification: HiRezMCPUnreal - MCP Server (Streamable HTTP Implementation)
 
 **Version:** 1.0
 **Date:** 2025-05-09
@@ -6,11 +6,11 @@
 
 ## 1. Introduction
 
-This document outlines the technical specification for implementing a Model Context Protocol (MCP) Server within the `HiRezMCPUnreal` Unreal Engine plugin. This implementation will adhere to the MCP standard, utilizing HTTP for primary communication, as detailed in the `MCP_Server_Implementation_Research.md` document.
+This document outlines the technical specification for implementing a Model Context Protocol (MCP) Server within the `HiRezMCPUnreal` Unreal Engine plugin. This implementation will adhere to the MCP standard, utilizing Streamable HTTP for primary communication.
 
 The goal is to expose Unreal Engine capabilities (assets, editor functions, game state) as MCP Tools, Resources, and Prompts, enabling external AI models and applications to interact with the Unreal Engine environment in a standardized way.
 
-This specification supersedes previous designs that may have focused on raw TCP communication for JSON-RPC, aligning instead with the more common HTTP transport for MCP.
+This specification supersedes previous designs that may have focused on raw TCP communication for JSON-RPC, aligning instead with the more common Streamable HTTP transport for MCP.
 
 ## 2. Core Architecture in Unreal Engine
 
@@ -23,9 +23,18 @@ The MCP Server will be implemented as part of an Unreal Engine plugin (`HiRezMCP
 
 ### 2.2. HTTP Server Implementation
 
-An HTTP server will be embedded within the plugin to handle MCP communications.
-*   **Port:** The server will listen on a configurable HTTP port (default, e.g., 30069, but clearly identified as HTTP).
-*   **Communication Model:** Initial implementation will use a synchronous HTTP POST request/response model. Client sends MCP Request via POST, Server returns MCP Response in the HTTP response body. Server-Sent Events (SSE) and server-initiated notifications are **deferred**.
+An HTTP server will be embedded within the plugin to handle MCP communications using the **Streamable HTTP** transport, as per the current MCP specification.
+
+*   **Port:** The server will listen on a configurable HTTP port (default, e.g., 30069).
+*   **Communication Model (Streamable HTTP):**
+    *   Clients send JSON-RPC messages via HTTP POST to a single MCP endpoint.
+    *   Clients MUST include an `Accept: application/json, text/event-stream` header, signaling their ability to handle both direct JSON responses and Server-Sent Events (SSE) streams.
+    *   The server responds based on the request and its capabilities:
+        *   `HTTP 202 Accepted` (no body): If the POST contained only JSON-RPC responses or notifications.
+        *   `Content-Type: application/json`: For a single JSON-RPC response to client requests.
+        *   `Content-Type: text/event-stream`: To initiate an SSE stream for multiple/ongoing messages or server-initiated notifications related to the client's request.
+    *   Clients MAY also use HTTP GET (with `Accept: text/event-stream`) to the MCP endpoint to request a server-initiated SSE stream.
+    *   SSE is an *optional component* of Streamable HTTP, employed by the server when streaming is appropriate. It is not a standalone, always-on requirement.
 *   **Options for HTTP Server:**
     1.  **Unreal Engine's `FHttpServerModule`:**
         *   Leverages built-in engine capabilities (`IHttpRouter`, `FHttpServerResponse`).
@@ -34,11 +43,12 @@ An HTTP server will be embedded within the plugin to handle MCP communications.
     2.  **Third-party C++ HTTP Library:** (e.g., `civetweb`, `cpp-httplib`, `Boost.Beast`)
         *   Pros: Potentially more robust, feature-rich (e.g., easier SSE handling, HTTPS support).
         *   Cons: Adds external dependency; integration effort (compilation, linking).
-*   **Decision Point:** The initial implementation will attempt to use `FHttpServerModule`. If significant limitations are encountered, a switch to a third-party library will be evaluated.
+*   **Decision Point:** The initial implementation will attempt to use `FHttpServerModule`. If significant limitations are encountered (e.g., with SSE streaming or header manipulation for Streamable HTTP), a switch to a third-party library will be evaluated.
 
 ### 2.3. Threading Model
 
 All network I/O and potentially lengthy MCP request processing must occur on non-game threads to prevent blocking the Unreal Engine main thread and causing hitches.
+
 *   **HTTP Listener Thread:** The HTTP server will have its own thread(s) for listening to and accepting incoming connections.
 *   **Request Handler Threads:** Each incoming MCP request (via HTTP POST) might be processed in a separate task or thread pool.
 *   **UE Main Thread Synchronization:** Any operations requiring access to UE game objects or systems (e.g., `UWorld`, `GEditor`) must be marshaled back to the game thread using `AsyncTask(ENamedThreads::GameThread, ...)` or similar mechanisms.
@@ -91,26 +101,28 @@ All network I/O and potentially lengthy MCP request processing must occur on non
 
 ### 3.2. MCP Connection Lifecycle
 
-A C++ class (e.g., `FMcpSession`) will manage the state of each connected client.
+A C++ class (e.g., `FMcpSession`) will manage the state of each connected client. The `Mcp-Session-Id` HTTP header will be used for session management if the server assigns one during initialization.
 
 *   **Initialization Phase (`initialize` method):**
-    *   Handler for the `initialize` JSON-RPC method.
+    *   Handler for the `initialize` JSON-RPC method (sent via HTTP POST).
     *   Input: `FInitializeParams` USTRUCT (containing `protocolVersion`, `clientInfo`, `capabilities`).
     *   Logic:
         *   Version negotiation: Compare client `protocolVersion` with server's supported version (e.g., "2025-03-26").
         *   Capability negotiation: Store client capabilities and prepare server capabilities.
+        *   The server MAY assign a session ID and include it in an `Mcp-Session-Id` header on the HTTP response.
     *   Output: `FInitializeResult` USTRUCT (containing `protocolVersion`, `serverInfo`, `serverCapabilities`).
-    *   This response is sent synchronously in the HTTP response to the `initialize` POST request.
+    *   This response is sent in the HTTP response body (typically `Content-Type: application/json`) to the `initialize` POST request.
 *   **`notifications/initialized` Notification:**
-    *   Upon receiving this notification from the client (via HTTP POST), the session is marked as fully active. (Server provides an empty HTTP 204 No Content or simple JSON-RPC success response).
+    *   Upon receiving this notification from the client (via HTTP POST), the session is marked as fully active. The server typically returns an HTTP 202 Accepted response.
 *   **Operation Phase:**
     *   A dispatcher (e.g., a `TMap<FString, TFunction<void(TSharedPtr<FJsonRpcRequest>, TSharedRef<FMcpSession>)>>`) will route incoming JSON-RPC methods (from HTTP POST) to their respective handlers.
-    *   Handlers will process requests and return JSON-RPC responses directly in the HTTP POST response body.
+    *   Handlers will process requests. Responses are sent back in the HTTP POST response body (`application/json`) or via an SSE stream (`text/event-stream`) if initiated.
 *   **Shutdown Phase:**
-    *   With synchronous HTTP, explicit session shutdown is less defined by transport. The `shutdown` and `exit` MCP methods can be used.
-    *   Implement `$/cancelRequest` to handle client-side cancellation of long-running operations (server will attempt to stop processing, but response for original request might have already been sent or is pending).
+    *   The `shutdown` and `exit` MCP methods can be used by the client (via HTTP POST).
+    *   Clients SHOULD send an HTTP DELETE request with the `Mcp-Session-Id` (if active) to explicitly terminate a session.
+    *   Implement `$/cancelRequest` to handle client-side cancellation of long-running operations.
 
-## 4. HTTP Transport Implementation (Synchronous POST)
+## 4. Streamable HTTP Transport Implementation
 
 ### 4.1. Server-Side Endpoint
 
@@ -118,16 +130,23 @@ A single base path (e.g., `/mcp`) will be used for all MCP communication.
 
 *   **HTTP POST `/mcp`:**
     *   Clients send all MCP Request or Notification messages to the server using HTTP POST to this endpoint.
+    *   Client MUST include `Accept: application/json, text/event-stream` header.
     *   The body of the POST request contains the JSON-RPC message string.
-    *   The server processes the JSON-RPC message.
-        *   If it's an MCP Request (containing an `id`), the server generates a corresponding JSON-RPC Response. This Response is sent back as the body of the HTTP 200 OK response to this POST request.
-        *   If it's an MCP Notification, the server processes it and typically returns an HTTP 204 No Content response or a generic JSON-RPC success acknowledgement if a response body is expected by the client framework for notifications (though JSON-RPC notifications strictly don't require responses).
-    *   **Session Management:** While HTTP POST is stateless, MCP itself implies a stateful session established by `initialize`. The server will need to manage session state (e.g., negotiated capabilities) in memory, potentially associated with a client identifier if provided/feasible, or assume a single-client model for simplicity if no robust client identification is implemented initially.
+    *   The server processes the JSON-RPC message:
+        *   If the POST body consists solely of JSON-RPC responses or notifications, and the server accepts the input, it MUST return an `HTTP 202 Accepted` with no body.
+        *   If the POST body contains any JSON-RPC requests, the server MUST respond with either:
+            *   `Content-Type: application/json`: The HTTP response body contains a single JSON-RPC Response.
+            *   `Content-Type: text/event-stream`: The server initiates an SSE stream. This stream SHOULD eventually include one JSON-RPC response for each JSON-RPC request sent in the POST. The server MAY send other JSON-RPC requests or notifications to the client over this stream.
+*   **HTTP GET `/mcp`:**
+    *   Clients MAY issue an HTTP GET request to the MCP endpoint to open an SSE stream for server-initiated messages.
+    *   Client MUST include `Accept: text/event-stream` header.
+    *   The server MUST either respond with `Content-Type: text/event-stream` (establishing SSE) or `HTTP 405 Method Not Allowed` if it doesn't support GET for streaming.
+*   **Session Management:** The server uses the `Mcp-Session-Id` HTTP header to manage sessions if implemented. If a client receives a session ID, it MUST include it on subsequent requests for that session.
 
 ### 4.2. Server-to-Client Message Delivery
 
-*   All MCP JSON-RPC **Responses** from the server to the client are delivered synchronously as the body of the HTTP POST response that carried the MCP Request.
-*   Server-initiated MCP JSON-RPC **Notifications** (e.g., `notifications/tools/list_changed`, `$/progress`) are **not supported** in this initial synchronous HTTP model. Their implementation is deferred and would require enabling SSE or an alternative push mechanism.
+*   MCP JSON-RPC **Responses** to client requests are delivered either as a single JSON object in the HTTP POST response body (`Content-Type: application/json`) or as individual messages within an SSE stream (`Content-Type: text/event-stream`) initiated in response to the POST.
+*   Server-initiated MCP JSON-RPC **Requests** or **Notifications** (e.g., `notifications/tools/list_changed`, `$/progress`) can be sent over an active SSE stream. This stream might be initiated in response to a client's POST or GET request.
 
 ### 4.3. Security Considerations
 
@@ -137,8 +156,9 @@ A single base path (e.g., `/mcp`) will be used for all MCP communication.
     *   Implementing HTTPS with `FHttpServerModule` might require engine modifications or be non-trivial.
     *   If using a third-party library, ensure it supports SSL/TLS (e.g., OpenSSL integration) for future implementation.
     *   **Warning:** Operating without TLS is insecure for production or sensitive data. This approach is for local development and testing only. Future work must address TLS implementation before any deployment outside of a trusted local environment.
-*   **Origin Validation:** If possible with the chosen HTTP server, validate the `Origin` header.
-*   **Authentication/Authorization:** The MCP spec largely defers this to the client/host. The server will initially trust incoming requests on the configured port. Future enhancements could include API key validation or other mechanisms if required.
+*   **Origin Header Validation:** Servers MUST validate the `Origin` header on all incoming HTTP requests.
+*   **Localhost Binding:** For local-only servers, bind to `localhost` (127.0.0.1).
+*   **Authentication/Authorization:** The MCP spec largely defers this. Initially, trust incoming requests. Future enhancements could include API keys. `Mcp-Session-Id` should be cryptographically secure if used.
 
 ## 5. MCP Features Implementation (UE C++)
 
@@ -158,10 +178,10 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
     *   Input schema validation (if `inputSchema` is defined in `FToolDefinition`).
     *   Executes the tool:
         *   If native C++, directly call the function.
-        *   Execution must be on a worker thread if potentially long-running, with results posted back. Use `$/progress` for updates.
+        *   Execution must be on a worker thread if potentially long-running. Use `$/progress` for updates if streaming.
     *   Output: `FToolCallResult` (containing `contentType`, `content`). `ContentPart`s (text, image) need to be supported.
 *   **`notifications/tools/list_changed`:**
-    *   Sent when the set of available tools changes. Requires server capability `tools: { "listChanged": true }`. **(Deferred with SSE)**
+    *   Sent when the set of available tools changes. Requires server capability `tools: { "listChanged": true }`. (Can be implemented via the SSE component of Streamable HTTP).
 
 ### 5.2. Resources
 
@@ -176,7 +196,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
     *   This is where the "get_blueprint_contents" feature from the initial memory fits.
 *   **`resources/subscribe` & `notifications/resources/content_changed`:**
     *   Allows clients to subscribe to changes in a resource.
-    *   Requires server capability `resources: { "subscribe": true }`. **(Deferred with SSE)**
+    *   Requires server capability `resources: { "subscribe": true }`. (Can be implemented via the SSE component of Streamable HTTP).
     *   Mechanisms like `FCoreUObjectDelegates::OnObjectModified` or asset-specific callbacks could trigger notifications.
 
 ### 5.3. Prompts
@@ -190,8 +210,8 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 
 ### 5.4. Utilities
 
-*   **`ping`:** Simple request/response to check connectivity.
-*   **`$/progress`:** Server sends this notification for long-running tool calls. **(Deferred with SSE)**
+*   **`ping`:** Simple request/response to check connectivity (standard JSON-RPC response).
+*   **`$/progress`:** Server sends this notification for long-running tool calls. (Can be implemented via the SSE component of Streamable HTTP if the server chooses to stream updates for a particular tool call).
 *   **`$/cancelRequest`:** Client sends this to request cancellation of an operation. Server should attempt to honor it.
 
 ## 6. Data Structures and Schema Adherence (UE C++)
@@ -219,22 +239,22 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 ## 9. Phased Implementation Plan (High-Level)
 
 1.  **Phase 1: Core HTTP Server & JSON-RPC Framework**
-    *   Set up chosen HTTP server (`FHttpServerModule` PoC) for synchronous POST request/response.
+    *   Set up chosen HTTP server (`FHttpServerModule` PoC) for Streamable HTTP.
     *   Implement JSON-RPC message parsing and serialization (core USTRUCTs).
     *   Implement `initialize` handshake (synchronous response) and `notifications/initialized` handling.
     *   Implement `ping` utility.
 2.  **Phase 2: Basic Tool Implementation**
     *   Implement `tools/list` and `tools/call` (synchronous responses).
     *   Create 1-2 simple example C++ tools (e.g., a tool to log a message, a tool to query basic editor state).
-    *   ~~Implement `notifications/tools/list_changed`.~~ (Deferred)
+    *   Implement `notifications/tools/list_changed` via SSE.
 3.  **Phase 3: Basic Resource Implementation**
     *   Implement `resources/list` and `resources/get_content` (synchronous responses).
     *   Implement `get_blueprint_contents` as a resource.
-    *   ~~Implement `notifications/resources/list_changed`.~~ (Deferred)
+    *   Implement `notifications/resources/content_changed` via SSE.
 4.  **Phase 4: Advanced Features & Refinements**
     *   Implement Prompts.
-    *   ~~Implement resource subscriptions (`resources/subscribe`, `notifications/resources/content_changed`).~~ (Deferred)
-    *   ~~Implement `$/progress` and~~ `$/cancelRequest`.
+    *   Implement resource subscriptions (`resources/subscribe`, `notifications/resources/content_changed`) via SSE.
+    *   Implement `$/progress` and `$/cancelRequest`.
     *   Robust error handling and logging.
     *   Threading improvements and performance testing.
 5.  **Phase 5: Security & Deployment**
@@ -244,7 +264,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 
 ## 10. Open Questions & Risks
 
-*   **`FHttpServerModule` Suitability:** Is it robust enough for production use, especially for ~~SSE and~~ potentially HTTPS?
+*   **`FHttpServerModule` Suitability:** Is it robust enough for production use, especially for Streamable HTTP?
 *   **HTTPS Implementation:** Complexity of integrating TLS, especially if `FHttpServerModule` doesn't support it easily.
 *   **Session Management without SSE:** How to effectively manage client-specific state (like negotiated capabilities) across stateless HTTP POST requests if no client identifier is consistently passed or managed.
 *   **Performance:** Impact of JSON processing and network traffic on UE performance, especially with many connected clients or large data transfers.
@@ -252,7 +272,6 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 
 ## 11. Future Considerations (Post-MVP)
 
-*   **Implement Server-Sent Events (SSE):** To enable server-initiated notifications (`list_changed`, `content_changed`, `$/progress`) and support for capabilities like `tools: { "listChanged": true }` and `resources: { "subscribe": true }`.
 *   Server-initiated Sampling (`sampling/createMessage`).
 *   Client-exposed Roots (`roots/list`).
 *   Structured output from tools (beyond simple text/binary).
