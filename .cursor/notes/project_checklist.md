@@ -7,23 +7,23 @@
 ---
 
 ## Phase 1: Core HTTP Server & JSON-RPC Framework
-- [ ] **Task 1.1:** Set up the chosen HTTP server (e.g., `FHttpServerModule` PoC) to handle synchronous POST requests.
-    - [ ] Sub-task: Configure a listening port (e.g., 30069) for HTTP.
-    - [ ] Sub-task: Implement basic request routing for a `/mcp` endpoint.
-- [ ] **Task 1.2:** Implement core JSON-RPC message parsing and serialization.
-    - [ ] Sub-task: Define USTRUCTs for `FJsonRpcRequest`, `FJsonRpcResponse`, `FJsonRpcError`.
-    - [ ] Sub-task: Implement functions to convert between JSON strings and these USTRUCTs.
-- [ ] **Task 1.3:** Implement the `initialize` MCP method (synchronous request/response).
-    - [ ] Sub-task: Define `FInitializeParams` and `FInitializeResult` USTRUCTs.
-    - [ ] Sub-task: Define `FServerInfo` and `FServerCapabilities` USTRUCTs.
-    - [ ] Sub-task: Handle client `initialize` POST request and return `FInitializeResult` in HTTP response.
-- [ ] **Task 1.4:** Implement handling for the `notifications/initialized` MCP client notification.
-    - [ ] Sub-task: Server receives POST, processes, returns HTTP 204 or simple success.
-- [ ] **Task 1.5:** Implement a basic session/state management concept (even if single-client focused for now).
-    - [ ] Sub-task: Store negotiated capabilities after `initialize`.
-- [ ] **Task 1.6:** Implement the `ping` utility MCP method (synchronous request/response).
-- [ ] **Task 1.7:** Basic logging setup (e.g., `LogHiRezMCP` category).
-- [ ] **Status:** Not Started
+- [X] **Task 1.1:** Set up the chosen HTTP server (e.g., `FHttpServerModule` PoC) to handle synchronous POST requests.
+    - [X] Sub-task: Configure a listening port (e.g., 30069) for HTTP.
+    - [X] Sub-task: Implement basic request routing for a `/mcp` endpoint.
+- [X] **Task 1.2:** Implement core JSON-RPC message parsing and serialization.
+    - [X] Sub-task: Define USTRUCTs for `FJsonRpcRequest`, `FJsonRpcResponse`, `FJsonRpcError`.
+    - [X] Sub-task: Implement functions to convert between JSON strings and these USTRUCTs.
+- [X] **Task 1.3:** Implement the `initialize` MCP method (synchronous request/response).
+    - [X] Sub-task: Define `FInitializeParams` and `FInitializeResult` USTRUCTs.
+    - [X] Sub-task: Define `FServerInfo` and `FServerCapabilities` USTRUCTs.
+    - [X] Sub-task: Handle client `initialize` POST request and return `FInitializeResult` in HTTP response.
+- [X] **Task 1.4:** Implement handling for the `notifications/initialized` MCP client notification.
+    - [X] Sub-task: Server receives POST, processes, returns HTTP 204 or simple success.
+- [X] **Task 1.5:** Implement a basic session/state management concept (even if single-client focused for now).
+    - [X] Sub-task: Store negotiated capabilities after `initialize`.
+- [X] **Task 1.6:** Implement the `ping` utility MCP method (synchronous request/response).
+- [X] **Task 1.7:** Basic logging setup (e.g., `LogHiRezMCP` category).
+- [X] **Status:** Completed
 
 ## Phase 2: Basic Tool Implementation
 - [ ] **Task 2.1:** Implement `tools/list` JSON-RPC method (synchronous response).
