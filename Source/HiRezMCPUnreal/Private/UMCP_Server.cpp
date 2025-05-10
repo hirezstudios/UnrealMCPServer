@@ -168,7 +168,7 @@ bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPt
 	}
 	
 	FUMCP_InitializeParams InitParams;
-	if (!FUMCP_InitializeParams::CreateFromJsonObject(Request.params, InitParams))
+	if (!UMCP_CreateFromJsonObject(Request.params, InitParams))
 	{
 		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
 		OutError.message = TEXT("Failed to parse 'initialize' params");
@@ -185,7 +185,7 @@ bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPt
 	// Populate ServerCapabilities (defaults are fine for now as defined in MCPTypes.h constructors)
 	// FServerCapabilities members are default-initialized. Example: InitResult.serverCapabilities.tools.inputSchema = true;
 
-	if (!InitResult.ToJsonObject(OutSuccess))
+	if (!UMCP_ToJsonObject(InitResult, OutSuccess))
 	{
 		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
 		OutError.message = TEXT("Failed to serialize initialize result");

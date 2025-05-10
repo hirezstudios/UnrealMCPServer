@@ -123,6 +123,19 @@ struct FUMCP_JsonRpcResponse
 };
 
 // MCP Specific Structures
+template<typename T>
+bool UMCP_ToJsonObject(const T& InStruct, TSharedPtr<FJsonObject>& OutJsonObject)
+{
+	if (!OutJsonObject.IsValid()) return false;
+	return FJsonObjectConverter::UStructToJsonObject(InStruct.StaticStruct(), &InStruct, OutJsonObject.ToSharedRef());
+}
+
+template<typename T>
+bool UMCP_CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, T& OutStruct)
+{
+	if (!JsonObject.IsValid()) return false;
+	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
+}
 
 USTRUCT()
 struct FUMCP_ServerInfo
@@ -137,9 +150,6 @@ struct FUMCP_ServerInfo
 
     // Could add more fields like 'documentationUrl', 'icon', etc. as needed
     FUMCP_ServerInfo() : name(TEXT("HiRezMCPUnreal")) {}
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerInfo& OutStruct);
 };
 
 USTRUCT()
@@ -155,11 +165,6 @@ struct FUMCP_ServerCapabilitiesTools
 
     UPROPERTY()
     bool outputSchema = false; // Whether server supports 'outputSchema' in ToolDefinition
-
-    FUMCP_ServerCapabilitiesTools() = default; // Added default constructor
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesTools& OutStruct);
 };
 
 USTRUCT()
@@ -172,11 +177,6 @@ struct FUMCP_ServerCapabilitiesResources
 
     UPROPERTY()
     bool subscribe = false; // Deferred as SSE is deferred
-
-    FUMCP_ServerCapabilitiesResources() = default; // Added default constructor
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesResources& OutStruct);
 };
 
 USTRUCT()
@@ -186,11 +186,6 @@ struct FUMCP_ServerCapabilitiesPrompts
 
     UPROPERTY()
     bool listChanged = false; // Deferred as SSE is deferred
-
-    FUMCP_ServerCapabilitiesPrompts() = default; // Added default constructor
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesPrompts& OutStruct);
 };
 
 USTRUCT()
@@ -209,11 +204,6 @@ struct FUMCP_ServerCapabilities // Add more capability structs as needed (e.g., 
 
     UPROPERTY()
     FUMCP_ServerCapabilitiesPrompts prompts;
-
-    FUMCP_ServerCapabilities() = default; // Default constructor is fine, members will be default-initialized
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilities& OutStruct);
 };
 
 USTRUCT()
@@ -231,9 +221,6 @@ struct FUMCP_InitializeParams
     // Client capabilities can be added here later if needed for negotiation
     // UPROPERTY()
     // TSharedPtr<FJsonObject> clientInfo;
-
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeParams& OutStruct);
 };
 
 USTRUCT()
@@ -249,9 +236,13 @@ struct FUMCP_InitializeResult
 
     UPROPERTY()
     FUMCP_ServerCapabilities capabilities;
+};
 
-    FUMCP_InitializeResult() = default; // Default constructor is fine, members will be default-initialized
+USTRUCT()
+struct FUMCP_ListToolsParams
+{
+	GENERATED_BODY()
 
-    bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeResult& OutStruct);
+	UPROPERTY()
+	FString Cursor;
 };
