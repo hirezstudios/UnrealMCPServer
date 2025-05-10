@@ -1,5 +1,3 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #include "HiRezMCPUnreal.h"
 #include "MCPTypes.h"
 
