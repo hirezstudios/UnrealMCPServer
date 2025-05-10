@@ -25,6 +25,76 @@ enum class EMCPErrorCode : int32
     // Example: OperationNotSupported = -32001,
 };
 
+// Represents a JSON-RPC Request ID, which can be a string, number, or null.
+// Also handles the concept of an "absent" ID for notifications that don't send one.
+USTRUCT()
+struct FJsonRpcId
+{
+    GENERATED_BODY()
+
+private:
+    // Internal storage for the ID. Can be FJsonValueString, FJsonValueNumber, FJsonValueNull, or nullptr (for absent ID).
+    TSharedPtr<FJsonValue> Value;
+
+    // Private constructor for internal use by static factories or specific type constructors
+    FJsonRpcId(TSharedPtr<FJsonValue> InValue) : Value(InValue) {}
+
+public:
+    // Default constructor: Represents an absent ID (e.g. for notifications or when ID field is missing).
+    FJsonRpcId() : Value(nullptr) {}
+
+    // Constructors from specific types
+    FJsonRpcId(const FString& InString) : Value(MakeShared<FJsonValueString>(InString)) {}
+    FJsonRpcId(const TCHAR* InString) : Value(MakeShared<FJsonValueString>(FString(InString))) {}
+    FJsonRpcId(int32 InNumber) : Value(MakeShared<FJsonValueNumber>(static_cast<double>(InNumber))) {}
+
+    // Constructor for an explicit JSON null ID
+    static FJsonRpcId CreateNullId()
+    {
+        return FJsonRpcId(MakeShared<FJsonValueNull>());
+    }
+	
+    // Create from a generic FJsonValue (e.g., when parsing from a FJsonObject)
+    static FJsonRpcId CreateFromJsonValue(const TSharedPtr<FJsonValue>& JsonValue)
+    {
+        // If JsonValue is nullptr (e.g. field was not found in JsonObject), this correctly results in an 'absent' ID.
+        // If JsonValue is a valid FJsonValueNull, it correctly results in a 'null' ID.
+        return FJsonRpcId(JsonValue);
+    }
+
+    // Type checking methods
+    bool IsString() const { return Value.IsValid() && Value->Type == EJson::String; }
+    bool IsNumber() const { return Value.IsValid() && Value->Type == EJson::Number; }
+    bool IsNull() const { return !Value.IsValid() || Value->Type == EJson::Null; }
+
+    // Accessor for the underlying FJsonValue, needed for serialization
+    TSharedPtr<FJsonValue> GetJsonValue() const 
+    {
+    	if (!Value.IsValid())
+    	{
+    		return MakeShared<FJsonValueNull>();
+    	}
+        // If Value is nullptr (absent ID), this will return nullptr.
+        // If the request had no ID, the response should also have no ID field.
+        // If the request ID was explicitly null, this returns an FJsonValueNull, and response ID will be null.
+        return Value; 
+    }
+
+    // Utility for logging or debugging
+    FString ToString() const
+    {
+        if (!Value.IsValid()) return TEXT("[null]");
+        switch (Value->Type)
+        {
+            case EJson::String: return Value->AsString();
+            case EJson::Number: return FString::Printf(TEXT("%g"), Value->AsNumber());
+            case EJson::Null:   return TEXT("[null]");
+            default: // Should not happen for a valid ID (boolean, array, object)
+                return TEXT("[invalid_id_type]"); 
+        }
+    }
+};
+
 // Forward declaration
 struct FJsonRpcErrorObject;
 
@@ -41,8 +111,8 @@ struct FJsonRpcRequest
 
     TSharedPtr<FJsonObject> params; // Using TSharedPtr<FJsonObject> for params
 
-    UPROPERTY()
-    FString id; // JSON-RPC ID can be string, number, or null. FString is a safe bet for MCP. Can be empty for notifications.
+    // ID is now FJsonRpcId to encapsulate its type (string, number, null, or absent)
+    FJsonRpcId id;
 
     FJsonRpcRequest() : jsonrpc(TEXT("2.0")) {}
 
@@ -55,7 +125,15 @@ struct FJsonRpcRequest
         {
             JsonObject->SetObjectField(TEXT("params"), params);
         }
-        JsonObject->SetStringField(TEXT("id"), id);
+        
+        // Use id.GetJsonValue() which can be nullptr if ID is absent
+        TSharedPtr<FJsonValue> IdValue = id.GetJsonValue();
+        if (IdValue.IsValid()) 
+        {
+            JsonObject->SetField(TEXT("id"), IdValue);
+        }
+        // If IdValue is nullptr (ID is absent), the 'id' field is correctly omitted from the JSON.
+
         return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
     }
 
@@ -66,34 +144,27 @@ struct FJsonRpcRequest
 
         if (!FJsonSerializer::Deserialize(Reader, RootJsonObject) || !RootJsonObject.IsValid())
         {
-            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Failed to deserialize JsonString to RootJsonObject. String: %s"), *JsonString);
+            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Failed to deserialize JsonString. String: %s"), *JsonString);
             return false;
         }
 
-        // Check for required fields first
-        if (!RootJsonObject->HasTypedField<EJson::String>(TEXT("jsonrpc")) ||
-            !RootJsonObject->HasTypedField<EJson::String>(TEXT("method")))
+        if (!RootJsonObject->TryGetStringField(TEXT("jsonrpc"), OutRequest.jsonrpc) ||
+            !RootJsonObject->TryGetStringField(TEXT("method"), OutRequest.method))
         {
-            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Missing 'jsonrpc' or 'method' in request. String: %s"), *JsonString);
+            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Missing 'jsonrpc' or 'method'. String: %s"), *JsonString);
             return false;
         }
 
-        OutRequest.jsonrpc = RootJsonObject->GetStringField(TEXT("jsonrpc"));
-        OutRequest.method = RootJsonObject->GetStringField(TEXT("method"));
-
-        // ID is optional for notifications, can be string or number. We use FString.
-        if (RootJsonObject->HasTypedField<EJson::String>(TEXT("id")))
+        // Get the "id" field as an FJsonValue if it exists, then create FJsonRpcId from it.
+        // If "id" field is not present in JSON, GetField returns nullptr, 
+        // and CreateFromJsonValue correctly creates an 'absent' FJsonRpcId.
+        if (RootJsonObject->HasField(TEXT("id")))
         {
-            OutRequest.id = RootJsonObject->GetStringField(TEXT("id"));
-        }
-        else if (RootJsonObject->HasTypedField<EJson::Number>(TEXT("id")))
-        {
-            // Convert number ID to string
-            OutRequest.id = FString::Printf(TEXT("%g"), RootJsonObject->GetNumberField(TEXT("id")));
+            OutRequest.id = FJsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
         }
         else
         {
-            OutRequest.id.Empty(); // No ID or null ID
+            OutRequest.id = FJsonRpcId::CreateNullId();
         }
         
         if (RootJsonObject->HasTypedField<EJson::Object>(TEXT("params")))
@@ -123,35 +194,38 @@ struct FJsonRpcErrorObject
     UPROPERTY()
     FString message;
 
-    TSharedPtr<FJsonObject> data; // Optional additional information
+    // data can be any JSON value, using FJsonValue to represent it.
+    TSharedPtr<FJsonValue> data; 
 
     FJsonRpcErrorObject() : code(0) {}
-    FJsonRpcErrorObject(EMCPErrorCode InErrorCode, const FString& InMessage, TSharedPtr<FJsonObject> InData = nullptr)
+    FJsonRpcErrorObject(EMCPErrorCode InErrorCode, const FString& InMessage, TSharedPtr<FJsonValue> InData = nullptr)
         : code(static_cast<int32>(InErrorCode)), message(InMessage), data(InData) {}
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
     {
-        OutJsonObject = FJsonObjectConverter::UStructToJsonObject(*this);
-        if (OutJsonObject.IsValid() && data.IsValid())
+        // FJsonObjectConverter::UStructToJsonObject will only serialize UPROPERTY members.
+        // We need to construct it manually or use a hybrid approach if we want to keep UPROPERTY for code/message.
+        OutJsonObject = MakeShared<FJsonObject>();
+        OutJsonObject->SetNumberField(TEXT("code"), code);
+        OutJsonObject->SetStringField(TEXT("message"), message);
+        if (data.IsValid()) // data is TSharedPtr<FJsonValue>
         {
-            OutJsonObject->SetObjectField(TEXT("data"), data);
+            OutJsonObject->SetField(TEXT("data"), data);
         }
-        return OutJsonObject.IsValid();
+        return true; // Assume success for manual construction
     }
 
     static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FJsonRpcErrorObject& OutErrorObject)
     {
-        if (!JsonObject.IsValid())
+        if (!JsonObject.IsValid()) return false;
+
+        // Manually parse UPROPERTY fields
+        if (!JsonObject->TryGetNumberField(TEXT("code"), OutErrorObject.code)) return false;
+        if (!JsonObject->TryGetStringField(TEXT("message"), OutErrorObject.message)) return false;
+
+        if (JsonObject->HasField(TEXT("data")))
         {
-            return false;
-        }
-        if (!FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutErrorObject, 0, 0))
-        {
-            return false;
-        }
-        if (JsonObject->HasTypedField<EJson::Object>(TEXT("data")))
-        {
-            OutErrorObject.data = JsonObject->GetObjectField(TEXT("data"));
+            OutErrorObject.data = JsonObject->GetField<EJson::None>(TEXT("data")); // Get data as FJsonValue
         }
         return true;
     }
@@ -165,11 +239,13 @@ struct FJsonRpcResponse
     UPROPERTY()
     FString jsonrpc; // Should be "2.0"
 
-    TSharedPtr<FJsonObject> result; // Using TSharedPtr<FJsonObject> for result
-    TSharedPtr<FJsonRpcErrorObject> error;
+    // ID is now FJsonRpcId to encapsulate its type (string, number, null, or absent)
+    FJsonRpcId id;
 
-    UPROPERTY()
-    FString id; // Must be the same as the request it is responding to.
+    // Result can be any valid JSON value (object, array, string, number, boolean, null)
+    TSharedPtr<FJsonValue> result; 
+    
+    TSharedPtr<FJsonRpcErrorObject> error; // Error object if an error occurred
 
     FJsonRpcResponse() : jsonrpc(TEXT("2.0")) {}
 
@@ -177,61 +253,91 @@ struct FJsonRpcResponse
     {
         TSharedPtr<FJsonObject> JsonObject = MakeShared<FJsonObject>();
         JsonObject->SetStringField(TEXT("jsonrpc"), jsonrpc);
-        JsonObject->SetStringField(TEXT("id"), id);
 
-        if (result.IsValid())
+        // Use id.GetJsonValue() which can be nullptr if ID is absent
+        TSharedPtr<FJsonValue> IdValue = id.GetJsonValue();
+        if (IdValue.IsValid()) 
         {
-            JsonObject->SetObjectField(TEXT("result"), result);
+            JsonObject->SetField(TEXT("id"), IdValue);
         }
-        else if (error.IsValid()) // Manually handle error field
+        // If IdValue is nullptr (ID is absent), the 'id' field is correctly omitted from the JSON.
+
+        if (error.IsValid()) // Check if error is valid and conceptually "set"
         {
             TSharedPtr<FJsonObject> ErrorJsonObject;
+            // Assuming FJsonRpcErrorObject::ToJsonObject correctly serializes it to ErrorJsonObject
             if (error->ToJsonObject(ErrorJsonObject) && ErrorJsonObject.IsValid())
             {
                 JsonObject->SetObjectField(TEXT("error"), ErrorJsonObject);
             }
             else
             {
-                // Fallback if error content serialization fails
+                // Fallback if error content serialization fails (should be rare)
                 TSharedPtr<FJsonObject> FallbackError = MakeShared<FJsonObject>();
-                FallbackError->SetNumberField(TEXT("code"), -32000); // Generic server error
-                FallbackError->SetStringField(TEXT("message"), TEXT("Failed to serialize error object content within FJsonRpcResponse."));
+                FallbackError->SetNumberField(TEXT("code"), static_cast<int32>(EMCPErrorCode::InternalError));
+                FallbackError->SetStringField(TEXT("message"), TEXT("Internal server error during error serialization."));
                 JsonObject->SetObjectField(TEXT("error"), FallbackError);
             }
         }
-        // If neither result nor error is present, it's valid for some responses.
+        else if (result.IsValid()) // Only include result if there is no error
+        {
+            // Set the result field using the FJsonValue, allowing any valid JSON type
+            JsonObject->SetField(TEXT("result"), result);
+        }
+        // If neither error nor result is present (valid for some successful notifications, 
+        // or if a method successfully does nothing and returns no data and no error),
+        // then neither field is added, which is fine. For responses to requests with an ID,
+        // either 'result' or 'error' MUST be present.
+
         return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
     }
 
+    // Optional: CreateFromJsonString for FJsonRpcResponse (less common for server to parse its own responses)
     static bool CreateFromJsonString(const FString& JsonString, FJsonRpcResponse& OutResponse)
     {
-        TSharedPtr<FJsonObject> JsonObject;
+        TSharedPtr<FJsonObject> RootJsonObject;
         TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
-        if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
+
+        if (!FJsonSerializer::Deserialize(Reader, RootJsonObject) || !RootJsonObject.IsValid())
         {
+            // UE_LOG for error if LogTemp or similar is accessible here
             return false;
         }
 
-        // Manually assign standard fields, FJsonObjectConverter::JsonObjectStringToUStruct won't work well due to non-UPROPERTY 'error'
-        OutResponse.jsonrpc = JsonObject->GetStringField(TEXT("jsonrpc"));
-        OutResponse.id = JsonObject->GetStringField(TEXT("id"));
-
-        if (JsonObject->HasTypedField<EJson::Object>(TEXT("result")))
+        if (!RootJsonObject->TryGetStringField(TEXT("jsonrpc"), OutResponse.jsonrpc))
         {
-            OutResponse.result = JsonObject->GetObjectField(TEXT("result"));
+            return false; 
         }
-        else if (JsonObject->HasTypedField<EJson::Object>(TEXT("error")))
+
+        // Get the "id" field as an FJsonValue if it exists, then create FJsonRpcId from it.
+        // If "id" field is not present in JSON, GetField returns nullptr, 
+        // and CreateFromJsonValue correctly creates an 'absent' FJsonRpcId.
+        if (RootJsonObject->HasField(TEXT("id")))
         {
-            TSharedPtr<FJsonObject> ErrorJsonObject = JsonObject->GetObjectField(TEXT("error"));
+            OutResponse.id = FJsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
+        }
+        else
+        {
+            OutResponse.id = FJsonRpcId::CreateNullId();
+        }
+
+        if (RootJsonObject->HasTypedField<EJson::Object>(TEXT("error")))
+        {
+            TSharedPtr<FJsonObject> ErrorJsonObject = RootJsonObject->GetObjectField(TEXT("error"));
             OutResponse.error = MakeShared<FJsonRpcErrorObject>();
-            if (!FJsonRpcErrorObject::CreateFromJsonObject(ErrorJsonObject, *OutResponse.error.Get()))
+            if (!FJsonRpcErrorObject::CreateFromJsonObject(ErrorJsonObject, *OutResponse.error))
             {
-                // Parsing the error object failed, maybe set a default error or clear it
-                OutResponse.error.Reset(); // Or populate with a parse error indication
-                // Optionally, we could consider this whole parsing a failure if the error object is malformed.
-                // For now, we'll allow the response to be created but with a potentially missing/invalid error.
+                // Failed to parse the error object content
+                OutResponse.error = nullptr; // Or handle error parsing failure
             }
         }
+        else if (RootJsonObject->HasField(TEXT("result"))) // Result can be any type
+        {
+            OutResponse.result = RootJsonObject->GetField<EJson::None>(TEXT("result"));
+        }
+        // If neither 'result' nor 'error' is present, it's an issue for non-notification responses.
+        // This basic parser doesn't validate that rule.
+        
         return true;
     }
 };
@@ -418,7 +524,7 @@ struct FInitializeResult
     FServerInformation serverInfo;
 
     UPROPERTY()
-    FServerCapabilities serverCapabilities;
+    FServerCapabilities capabilities;
 
     FInitializeResult() = default; // Default constructor is fine, members will be default-initialized
 

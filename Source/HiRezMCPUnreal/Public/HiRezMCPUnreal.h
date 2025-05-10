@@ -11,6 +11,7 @@
 // Forward declarations for JSON types (used in helpers)
 struct FJsonRpcResponse;
 struct FJsonRpcErrorObject;
+struct FJsonRpcId;
 
 // Define a log category
 HIREZMCPUNREAL_API DECLARE_LOG_CATEGORY_EXTERN(LogHiRezMCP, Log, All);
@@ -37,7 +38,7 @@ public:
 private:
     // Helper methods for sending responses
     static bool ConvertRpcResponseToJsonString(const FJsonRpcResponse& RpcResponse, FString& OutJsonString);
-    static bool ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FString& RequestId, FString& OutJsonString);
+    static bool ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FJsonRpcId& RequestId, FString& OutJsonString);
     static void SendJsonResponse(const FHttpResultCallback& OnComplete, const FString& JsonPayload, bool bSuccess = true);
 
     TSharedPtr<IHttpRouter> HttpRouter;

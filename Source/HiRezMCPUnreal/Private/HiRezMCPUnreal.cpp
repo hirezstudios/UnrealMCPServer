@@ -18,7 +18,7 @@
 DEFINE_LOG_CATEGORY(LogHiRezMCP);
 
 // Define static constants
-const FString FHiRezMCPUnrealModule::MCP_PROTOCOL_VERSION = TEXT("2025-03-26");
+const FString FHiRezMCPUnrealModule::MCP_PROTOCOL_VERSION = TEXT("2024-11-05");//TEXT("2025-03-26");
 const FString FHiRezMCPUnrealModule::PLUGIN_VERSION = TEXT("0.1.0");
 
 void FHiRezMCPUnrealModule::StartupModule()
@@ -92,11 +92,12 @@ bool FHiRezMCPUnrealModule::ConvertRpcResponseToJsonString(const FJsonRpcRespons
 }
 
 // Helper to convert FJsonRpcErrorObject and RequestId to JSON string (full JSON-RPC error response)
-bool FHiRezMCPUnrealModule::ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FString& RequestId, FString& OutJsonString)
+bool FHiRezMCPUnrealModule::ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FJsonRpcId& RequestId, FString& OutJsonString)
 {
     FJsonRpcResponse ErrorResponse;
-    ErrorResponse.id = RequestId;
-    ErrorResponse.error = MakeShared<FJsonRpcErrorObject>(RpcError); // FJsonRpcErrorObject is a USTRUCT, needs to be on heap for TSharedPtr
+    ErrorResponse.error = MakeShared<FJsonRpcErrorObject>(RpcError); // Make a copy for the response
+    ErrorResponse.id = RequestId; // Assign FJsonRpcId directly
+    // ErrorResponse.jsonrpc is defaulted to "2.0"
 
     return ErrorResponse.ToJsonString(OutJsonString);
 }
@@ -104,9 +105,19 @@ bool FHiRezMCPUnrealModule::ConvertRpcErrorToJsonString(const FJsonRpcErrorObjec
 // Helper to send a JSON response
 void FHiRezMCPUnrealModule::SendJsonResponse(const FHttpResultCallback& OnComplete, const FString& JsonPayload, bool bSuccess)
 {
+    UE_LOG(LogHiRezMCP, Log, TEXT("SendJsonResponse: Payload received: %s"), *JsonPayload);
     TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(JsonPayload, TEXT("application/json"));
-    Response->Code = EHttpServerResponseCodes::Ok;
+    Response->Code = EHttpServerResponseCodes::Ok; 
+
+    if (!Response.IsValid())
+    {
+        UE_LOG(LogHiRezMCP, Error, TEXT("SendJsonResponse: FHttpServerResponse::Create failed to create a valid response object!"));
+        return; 
+    }
+    
+    UE_LOG(LogHiRezMCP, Log, TEXT("SendJsonResponse: Calling OnComplete. Response Code: %d"), Response->Code);
     OnComplete(MoveTemp(Response));
+    UE_LOG(LogHiRezMCP, Log, TEXT("SendJsonResponse: OnComplete has been called."));
 }
 
 // Main handler for MCP requests, runs on an HTTP thread
@@ -124,7 +135,7 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
         UE_LOG(LogHiRezMCP, Error, TEXT("Failed to parse MCP request JSON: %s"), *RequestBody);
         FJsonRpcErrorObject ErrorObj(EMCPErrorCode::ParseError, TEXT("Failed to parse MCP request JSON"));
         FString ErrorJsonString;
-        ConvertRpcErrorToJsonString(ErrorObj, TEXT(""), ErrorJsonString);
+        ConvertRpcErrorToJsonString(ErrorObj, FJsonRpcId(), ErrorJsonString);
         SendJsonResponse(OnComplete, ErrorJsonString, false);
         return;
     }
@@ -183,7 +194,11 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
             TSharedPtr<FJsonObject> ResultJsonObject;
             if (InitResult.ToJsonObject(ResultJsonObject))
             {
-                RpcResponse.result = ResultJsonObject;
+                RpcResponse.result = MakeShared<FJsonValueObject>(ResultJsonObject); // Explicitly construct base from derived TSharedPtr
+                FString ResultJsonStringForLog;
+                auto Writer = TJsonWriterFactory<>::Create(&ResultJsonStringForLog);
+                FJsonSerializer::Serialize(ResultJsonObject.ToSharedRef(), Writer);
+                UE_LOG(LogHiRezMCP, Log, TEXT("Serialized FInitializeResult to JsonObject: %s"), *ResultJsonStringForLog);
             }
             else
             {
@@ -201,7 +216,11 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
             FString ResponseJsonString;
             if (RpcResponse.ToJsonString(ResponseJsonString))
             {
+                UE_LOG(LogHiRezMCP, Log, TEXT("Final 'initialize' response JSON string: %s"), *ResponseJsonString);
+                
+                UE_LOG(LogHiRezMCP, Log, TEXT("Attempting to send 'initialize' response...")); 
                 SendJsonResponse(OnComplete, ResponseJsonString, true);
+                UE_LOG(LogHiRezMCP, Log, TEXT("'initialize' response sent (or at least SendJsonResponse was called).")); 
             }
             else
             {
@@ -237,7 +256,7 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
         FJsonRpcResponse RpcResponse;
         RpcResponse.id = RpcRequest.id;
         // Per MCP spec, ping result should be an empty JSON object {}
-        RpcResponse.result = MakeShared<FJsonObject>(); 
+        RpcResponse.result = MakeShared<FJsonValueObject>(MakeShared<FJsonObject>()); // Explicitly construct base TSharedPtr
 
         FString ResponseJsonString;
         if (RpcResponse.ToJsonString(ResponseJsonString))
