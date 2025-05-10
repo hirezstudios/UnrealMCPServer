@@ -14,4 +14,5 @@ public:
     virtual void ShutdownModule() override;
 private:
 	TUniquePtr<class FUMCP_Server> Server;
+	TUniquePtr<class FUMCP_CommonTools> CommonTools;
 };
