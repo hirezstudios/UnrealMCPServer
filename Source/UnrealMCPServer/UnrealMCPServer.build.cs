@@ -2,9 +2,9 @@
 
 using UnrealBuildTool;
 
-public class HiRezMCPUnreal : ModuleRules
+public class UnrealMCPServer : ModuleRules
 {
-	public HiRezMCPUnreal(ReadOnlyTargetRules Target) : base(Target)
+	public UnrealMCPServer(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		

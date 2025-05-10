@@ -124,14 +124,14 @@ struct FUMCP_JsonRpcResponse
 
 // MCP Specific Structures
 template<typename T>
-bool UMCP_ToJsonObject(const T& InStruct, TSharedPtr<FJsonObject>& OutJsonObject)
+UNREALMCPSERVER_API bool UMCP_ToJsonObject(const T& InStruct, TSharedPtr<FJsonObject>& OutJsonObject)
 {
 	if (!OutJsonObject.IsValid()) return false;
 	return FJsonObjectConverter::UStructToJsonObject(InStruct.StaticStruct(), &InStruct, OutJsonObject.ToSharedRef());
 }
 
 template<typename T>
-bool UMCP_CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, T& OutStruct, bool bAllowMissingObject = false)
+UNREALMCPSERVER_API bool UMCP_CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, T& OutStruct, bool bAllowMissingObject = false)
 {
 	if (!JsonObject.IsValid()) return bAllowMissingObject;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
@@ -143,13 +143,12 @@ struct FUMCP_ServerInfo
     GENERATED_BODY()
 
     UPROPERTY()
-    FString name; // e.g., "HiRezMCPUnreal"
+    FString name;
 
     UPROPERTY()
-    FString version; // e.g., "0.1.0"
+    FString version;
 
-    // Could add more fields like 'documentationUrl', 'icon', etc. as needed
-    FUMCP_ServerInfo() : name(TEXT("HiRezMCPUnreal")) {}
+    FUMCP_ServerInfo() : name(TEXT("UnrealMCPServer")) {}
 };
 
 USTRUCT()
@@ -259,7 +258,7 @@ bool UMCP_CreateFromJsonObject<FUMCP_CallToolParams>(const TSharedPtr<FJsonObjec
 }
 
 USTRUCT()
-struct FUMCP_CallToolResultContent
+struct UNREALMCPSERVER_API FUMCP_CallToolResultContent
 {
 	GENERATED_BODY()
 	
@@ -299,10 +298,10 @@ struct FUMCP_ListToolsParams
 	FString Cursor;
 };
 
-DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
+UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
 
 USTRUCT()
-struct FUMCP_ToolDefinition
+struct UNREALMCPSERVER_API FUMCP_ToolDefinition
 {
 	GENERATED_BODY()
 

@@ -1,12 +1,12 @@
-#include "HiRezMCPUnreal.h"
+#include "UnrealMCPServerModule.h"
 #include "UMCP_Server.h"
 
 // Define the log category
-DEFINE_LOG_CATEGORY(LogHiRezMCP);
+DEFINE_LOG_CATEGORY(LogUnrealMCPServer);
 
-void FHiRezMCPUnrealModule::StartupModule()
+void FUnrealMCPServerModule::StartupModule()
 {
-	UE_LOG(LogHiRezMCP, Warning, TEXT("HiRezMCPUnrealModule has started"));
+	UE_LOG(LogUnrealMCPServer, Warning, TEXT("FUnrealMCPServerModule has started"));
 	Server = MakeUnique<FUMCP_Server>();
 	if (Server)
 	{
@@ -15,7 +15,7 @@ void FHiRezMCPUnrealModule::StartupModule()
 		TestTool.description = TEXT("This is a test tool");
 		TestTool.DoToolCall = FUMCP_ToolCall::CreateLambda([](TSharedPtr<FJsonObject> arguments, TArray<FUMCP_CallToolResultContent>& OutContent)
 		{
-			UE_LOG(LogHiRezMCP, Error, TEXT("HELLO WORLD"));
+			UE_LOG(LogUnrealMCPServer, Error, TEXT("HELLO WORLD"));
 			auto& Content = OutContent.Add_GetRef(FUMCP_CallToolResultContent());
 			Content.type = TEXT("text");
 			Content.text = TEXT("Hello World, from our MCP!");
@@ -27,14 +27,14 @@ void FHiRezMCPUnrealModule::StartupModule()
 	}
 }
 
-void FHiRezMCPUnrealModule::ShutdownModule()
+void FUnrealMCPServerModule::ShutdownModule()
 {
-	UE_LOG(LogHiRezMCP, Warning, TEXT("HiRezMCPUnrealModule has shut down"));
 	if (Server)
 	{
 		Server->StopServer();
 		Server.Reset();
 	}
+	UE_LOG(LogUnrealMCPServer, Warning, TEXT("FUnrealMCPServerModule has shut down"));
 }
 
-IMPLEMENT_MODULE(FHiRezMCPUnrealModule, HiRezMCPUnreal)
+IMPLEMENT_MODULE(FUnrealMCPServerModule, UnrealMCPServer)

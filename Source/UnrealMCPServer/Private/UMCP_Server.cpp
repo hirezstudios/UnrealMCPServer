@@ -1,6 +1,6 @@
 ﻿#include "UMCP_Server.h"
 #include "UMCP_Types.h"
-#include "HiRezMCPUnreal.h"
+#include "UnrealMCPServerModule.h"
 
 #include "HttpServerModule.h"
 #include "IHttpRouter.h"
@@ -20,7 +20,7 @@ void FUMCP_Server::StartServer()
 	HttpRouter = HttpServerModule.GetHttpRouter(HttpServerPort);
 	if (!HttpRouter.IsValid())
 	{
-		UE_LOG(LogHiRezMCP, Error, TEXT("Failed to get HttpRouter on port %d. Another server might be running or port is in use."), HttpServerPort);
+		UE_LOG(LogUnrealMCPServer, Error, TEXT("Failed to get HttpRouter on port %d. Another server might be running or port is in use."), HttpServerPort);
 		return;
 	}
 
@@ -31,11 +31,11 @@ void FUMCP_Server::StartServer()
 		});
 	RegisterInternalRpcMethodHandlers();
 
-	UE_LOG(LogHiRezMCP, Log, TEXT("Bound /mcp to handler."));
+	UE_LOG(LogUnrealMCPServer, Log, TEXT("Bound /mcp to handler."));
 
     // Start listening for requests
     HttpServerModule.StartAllListeners();
-	UE_LOG(LogHiRezMCP, Log, TEXT("HTTP Server started on port %d"), HttpServerPort);
+	UE_LOG(LogUnrealMCPServer, Log, TEXT("HTTP Server started on port %d"), HttpServerPort);
 }
 
 void FUMCP_Server::StopServer()
@@ -49,7 +49,7 @@ void FUMCP_Server::StopServer()
 			RouteHandle_MCPStreamableHTTP.Reset();
 		}
 
-		UE_LOG(LogHiRezMCP, Log, TEXT("All routes unbound."));
+		UE_LOG(LogUnrealMCPServer, Log, TEXT("All routes unbound."));
 		HttpRouter.Reset();
 	}
 	JsonRpcMethodHandlers.Empty();
@@ -78,28 +78,28 @@ void FUMCP_Server::SendJsonRpcResponse(const FHttpResultCallback& OnComplete, co
 	FString JsonPayload;
 	if (!RpcResponse.ToJsonString(JsonPayload))
 	{
-		UE_LOG(LogHiRezMCP, Error, TEXT("Failed to serialize response."));
+		UE_LOG(LogUnrealMCPServer, Error, TEXT("Failed to serialize response."));
 		JsonPayload = TEXT("{\"jsonrpc\": \"2.0\", \"id\": null, \"error\": {\"code\": -32603, \"message\": \"Internal error - Failed to serialize response\"}}");
 	}
 
 	if (JsonPayload.Len() > 1000)
 	{
-		UE_LOG(LogHiRezMCP, Verbose, TEXT("SendJsonResponse: Payload received (truncated): %s"), *JsonPayload.Left(1000));
+		UE_LOG(LogUnrealMCPServer, Verbose, TEXT("SendJsonResponse: Payload received (truncated): %s"), *JsonPayload.Left(1000));
 	}
 	else
 	{
-		UE_LOG(LogHiRezMCP, Verbose, TEXT("SendJsonResponse: Payload received: %s"), *JsonPayload);
+		UE_LOG(LogUnrealMCPServer, Verbose, TEXT("SendJsonResponse: Payload received: %s"), *JsonPayload);
 	}
     TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(JsonPayload, TEXT("application/json"));
     Response->Code = EHttpServerResponseCodes::Ok; 
 
     if (!Response.IsValid())
     {
-        UE_LOG(LogHiRezMCP, Error, TEXT("SendJsonResponse: FHttpServerResponse::Create failed to create a valid response object!"));
+        UE_LOG(LogUnrealMCPServer, Error, TEXT("SendJsonResponse: FHttpServerResponse::Create failed to create a valid response object!"));
         return; 
     }
     
-    UE_LOG(LogHiRezMCP, Verbose, TEXT("SendJsonResponse: Calling OnComplete. Response Code: %d"), Response->Code);
+    UE_LOG(LogUnrealMCPServer, Verbose, TEXT("SendJsonResponse: Calling OnComplete. Response Code: %d"), Response->Code);
     OnComplete(MoveTemp(Response));
 }
 
@@ -108,14 +108,14 @@ void FUMCP_Server::HandleStreamableHTTPMCPRequest(const FHttpServerRequest& Requ
 {
 	FUTF8ToTCHAR Convert((ANSICHAR*)Request.Body.GetData(), Request.Body.Num());
 	FString RequestBody(Convert.Length(), Convert.Get());
-    UE_LOG(LogHiRezMCP, Verbose, TEXT("Received MCP request: %s"), *RequestBody);
+    UE_LOG(LogUnrealMCPServer, Verbose, TEXT("Received MCP request: %s"), *RequestBody);
 	
 	FUMCP_JsonRpcResponse Response;
 
     FUMCP_JsonRpcRequest RpcRequest;
     if (!FUMCP_JsonRpcRequest::CreateFromJsonString(RequestBody, RpcRequest))
     {
-        UE_LOG(LogHiRezMCP, Error, TEXT("Failed to parse MCP request JSON: %s"), *RequestBody);
+        UE_LOG(LogUnrealMCPServer, Error, TEXT("Failed to parse MCP request JSON: %s"), *RequestBody);
     	Response.error = MakeShared<FUMCP_JsonRpcError>(EUMCP_JsonRpcErrorCode::ParseError, TEXT("Failed to parse MCP request JSON"));
         SendJsonRpcResponse(OnComplete, Response);
         return;
@@ -124,7 +124,7 @@ void FUMCP_Server::HandleStreamableHTTPMCPRequest(const FHttpServerRequest& Requ
 
     if (RpcRequest.jsonrpc != TEXT("2.0"))
     {
-        UE_LOG(LogHiRezMCP, Error, TEXT("Invalid JSON-RPC version: %s"), *RpcRequest.jsonrpc);
+        UE_LOG(LogUnrealMCPServer, Error, TEXT("Invalid JSON-RPC version: %s"), *RpcRequest.jsonrpc);
 		Response.error = MakeShared<FUMCP_JsonRpcError>(EUMCP_JsonRpcErrorCode::InvalidRequest, TEXT("Invalid Request - JSON-RPC version must be 2.0"));
         SendJsonRpcResponse(OnComplete, Response);
         return;
@@ -133,7 +133,7 @@ void FUMCP_Server::HandleStreamableHTTPMCPRequest(const FHttpServerRequest& Requ
 	UMCP_JsonRpcHandler* Handler = JsonRpcMethodHandlers.Find(RpcRequest.method);
 	if (!Handler)
 	{
-        UE_LOG(LogHiRezMCP, Warning, TEXT("Unknown MCP method received: %s"), *RpcRequest.method);
+        UE_LOG(LogUnrealMCPServer, Warning, TEXT("Unknown MCP method received: %s"), *RpcRequest.method);
 		Response.error = MakeShared<FUMCP_JsonRpcError>(EUMCP_JsonRpcErrorCode::MethodNotFound, TEXT("Method not found"));
 		SendJsonRpcResponse(OnComplete, Response);
 		return;
@@ -143,7 +143,7 @@ void FUMCP_Server::HandleStreamableHTTPMCPRequest(const FHttpServerRequest& Requ
 	auto ErrorObject = MakeShared<FUMCP_JsonRpcError>();
 	if (!(*Handler)(RpcRequest, SuccessObject, *ErrorObject))
 	{
-		UE_LOG(LogHiRezMCP, Warning, TEXT("Error handling '%s': (%d) %s"), *RpcRequest.method, ErrorObject->code, *ErrorObject->message);
+		UE_LOG(LogUnrealMCPServer, Warning, TEXT("Error handling '%s': (%d) %s"), *RpcRequest.method, ErrorObject->code, *ErrorObject->message);
 		Response.error = MoveTemp(ErrorObject);
 		SendJsonRpcResponse(OnComplete, Response);
 		return;
@@ -190,7 +190,7 @@ bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPt
 	
 	FUMCP_InitializeResult Result;
 	Result.protocolVersion = MCP_PROTOCOL_VERSION; // Server's supported version
-	Result.serverInfo.name = TEXT("HiRezMCPUnreal");
+	Result.serverInfo.name = TEXT("UnrealMCPServer");
 	Result.serverInfo.version = PLUGIN_VERSION + TEXT(" (") + FEngineVersion::Current().ToString(EVersionComponent::Patch) + TEXT(")");
 
 	// Populate ServerCapabilities (defaults are fine for now as defined in MCPTypes.h constructors)
@@ -208,13 +208,13 @@ bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPt
 
 bool FUMCP_Server::Rpc_Ping(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 {
-	UE_LOG(LogHiRezMCP, Verbose, TEXT("Handling ping method."));
+	UE_LOG(LogUnrealMCPServer, Verbose, TEXT("Handling ping method."));
 	return true;
 }
 
 bool FUMCP_Server::Rpc_ClientNotifyInitialized(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 {
-	UE_LOG(LogHiRezMCP, Verbose, TEXT("Handling ClientNotifyInitialized method."));
+	UE_LOG(LogUnrealMCPServer, Verbose, TEXT("Handling ClientNotifyInitialized method."));
 	return true;
 }
 

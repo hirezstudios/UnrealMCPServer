@@ -13,7 +13,7 @@ struct FUMCP_JsonRpcError;
 struct FUMCP_JsonRpcId;
 using UMCP_JsonRpcHandler = TFunction<bool(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)>;
 
-class HIREZMCPUNREAL_API FUMCP_Server
+class UNREALMCPSERVER_API FUMCP_Server
 {
 public:
 	void StartServer();

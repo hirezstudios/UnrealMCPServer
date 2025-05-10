@@ -4,9 +4,9 @@
 #include "Modules/ModuleManager.h"
 
 // Define a log category
-HIREZMCPUNREAL_API DECLARE_LOG_CATEGORY_EXTERN(LogHiRezMCP, Log, All);
+UNREALMCPSERVER_API DECLARE_LOG_CATEGORY_EXTERN(LogUnrealMCPServer, Log, All);
 
-class HIREZMCPUNREAL_API FHiRezMCPUnrealModule : public IModuleInterface
+class UNREALMCPSERVER_API FUnrealMCPServerModule : public IModuleInterface
 {
 public:
     /** IModuleInterface implementation */
