@@ -62,6 +62,16 @@ void FUMCP_Server::RegisterRpcMethodHandler(const FString& MethodName, UMCP_Json
 	JsonRpcMethodHandlers.Add(MethodName, Handler);
 }
 
+bool FUMCP_Server::RegisterTool(FUMCP_ToolDefinition Tool)
+{
+	if (Tools.Contains(Tool.name))
+	{
+		return false;
+	}
+	Tools.Add(Tool.name, Tool);
+	return true;
+}
+
 // Helper to send a JSON response
 void FUMCP_Server::SendJsonRpcResponse(const FHttpResultCallback& OnComplete, const FUMCP_JsonRpcResponse& RpcResponse)
 {
@@ -156,19 +166,20 @@ void FUMCP_Server::RegisterInternalRpcMethodHandlers()
 	{
 		return Rpc_ClientNotifyInitialized(Request, OutSuccess, OutError);
 	});
+	RegisterRpcMethodHandler(TEXT("tools/list"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+	{
+		return Rpc_ToolsList(Request, OutSuccess, OutError);
+	});
+	RegisterRpcMethodHandler(TEXT("tools/call"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+	{
+		return Rpc_ToolsCall(Request, OutSuccess, OutError);
+	});
 }
 
 bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 {
-	if (!Request.params.IsValid())
-	{
-		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
-		OutError.message = TEXT("Failed to parse 'initialize' params: params object is null or invalid.");
-        return false;
-	}
-	
-	FUMCP_InitializeParams InitParams;
-	if (!UMCP_CreateFromJsonObject(Request.params, InitParams))
+	FUMCP_InitializeParams Params;
+	if (!UMCP_CreateFromJsonObject(Request.params, Params))
 	{
 		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
 		OutError.message = TEXT("Failed to parse 'initialize' params");
@@ -177,15 +188,15 @@ bool FUMCP_Server::Rpc_Initialize(const FUMCP_JsonRpcRequest& Request, TSharedPt
 
 	// TODO proper capabilities negotiation
 	
-	FUMCP_InitializeResult InitResult;
-	InitResult.protocolVersion = MCP_PROTOCOL_VERSION; // Server's supported version
-	InitResult.serverInfo.name = TEXT("HiRezMCPUnreal");
-	InitResult.serverInfo.version = PLUGIN_VERSION + TEXT(" (") + FEngineVersion::Current().ToString(EVersionComponent::Patch) + TEXT(")");
+	FUMCP_InitializeResult Result;
+	Result.protocolVersion = MCP_PROTOCOL_VERSION; // Server's supported version
+	Result.serverInfo.name = TEXT("HiRezMCPUnreal");
+	Result.serverInfo.version = PLUGIN_VERSION + TEXT(" (") + FEngineVersion::Current().ToString(EVersionComponent::Patch) + TEXT(")");
 
 	// Populate ServerCapabilities (defaults are fine for now as defined in MCPTypes.h constructors)
-	// FServerCapabilities members are default-initialized. Example: InitResult.serverCapabilities.tools.inputSchema = true;
+	// FServerCapabilities members are default-initialized. Example: Result.serverCapabilities.tools.inputSchema = true;
 
-	if (!UMCP_ToJsonObject(InitResult, OutSuccess))
+	if (!UMCP_ToJsonObject(Result, OutSuccess))
 	{
 		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
 		OutError.message = TEXT("Failed to serialize initialize result");
@@ -204,5 +215,62 @@ bool FUMCP_Server::Rpc_Ping(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJso
 bool FUMCP_Server::Rpc_ClientNotifyInitialized(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 {
 	UE_LOG(LogHiRezMCP, Verbose, TEXT("Handling ClientNotifyInitialized method."));
+	return true;
+}
+
+bool FUMCP_Server::Rpc_ToolsList(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+{
+	FUMCP_ListToolsParams Params;
+	if (!UMCP_CreateFromJsonObject(Request.params, Params, true))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
+		OutError.message = TEXT("Failed to parse list tools params");
+        return false;
+	}
+
+	// Unfortunately, unreal doesn't have a good json serialization override and the json tools have
+	// a schema that was too complicated to deal with the complexity in the middle.
+	// So for now we manually add them to the response array here.
+	TArray<TSharedPtr<FJsonValue>> ResultTools;
+	for (auto Itr = Tools.CreateConstIterator(); Itr; ++Itr)
+	{
+		auto ToolDef = MakeShared<FJsonObject>();
+		ToolDef->SetStringField(TEXT("name"), Itr->Key);
+		ToolDef->SetStringField(TEXT("description"), Itr->Value.description);
+		ToolDef->SetObjectField(TEXT("inputSchema"), Itr->Value.inputSchema);
+		ResultTools.Add(MakeShared<FJsonValueObject>(MoveTemp(ToolDef)));
+	}
+	OutSuccess->SetArrayField(TEXT("tools"), MoveTemp(ResultTools));
+	// `nextCursor` is blank, since we return them all
+	return true;
+}
+
+bool FUMCP_Server::Rpc_ToolsCall(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+{
+	FUMCP_CallToolParams Params;
+	UMCP_CreateFromJsonObject(Request.params, Params);
+	auto* Tool = Tools.Find(Params.name);
+	if (!Tool)
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
+		OutError.message = TEXT("Unknown tool name");
+		return false;
+	}
+
+	if (!Tool->DoToolCall.IsBound())
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+		OutError.message = TEXT("Tool has no bound delegate");
+		return false;
+	}
+
+	FUMCP_CallToolResult Result;
+	Result.isError = Tool->DoToolCall.Execute(Params.arguments, Result.content);
+	if (!UMCP_ToJsonObject(Result, OutSuccess))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+		OutError.message = TEXT("Failed to serialize result");
+		return false;
+	}
 	return true;
 }

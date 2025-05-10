@@ -131,9 +131,9 @@ bool UMCP_ToJsonObject(const T& InStruct, TSharedPtr<FJsonObject>& OutJsonObject
 }
 
 template<typename T>
-bool UMCP_CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, T& OutStruct)
+bool UMCP_CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, T& OutStruct, bool bAllowMissingObject = false)
 {
-	if (!JsonObject.IsValid()) return false;
+	if (!JsonObject.IsValid()) return bAllowMissingObject;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
@@ -161,7 +161,7 @@ struct FUMCP_ServerCapabilitiesTools
     bool listChanged = false; // Deferred as SSE is deferred
 
     UPROPERTY()
-    bool inputSchema = false; // Whether server supports 'inputSchema' in ToolDefinition
+    bool inputSchema = true; // Whether server supports 'inputSchema' in ToolDefinition
 
     UPROPERTY()
     bool outputSchema = false; // Whether server supports 'outputSchema' in ToolDefinition
@@ -239,10 +239,96 @@ struct FUMCP_InitializeResult
 };
 
 USTRUCT()
+struct FUMCP_CallToolParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString name;
+
+	TSharedPtr<FJsonObject> arguments;
+};
+
+template<>
+bool UMCP_CreateFromJsonObject<FUMCP_CallToolParams>(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_CallToolParams& OutStruct, bool bAllowMissingObject)
+{
+	if (!JsonObject.IsValid()) return bAllowMissingObject;
+	OutStruct.name = JsonObject->GetStringField("name");
+	OutStruct.arguments = JsonObject->GetObjectField("arguments");
+	return true;
+}
+
+USTRUCT()
+struct FUMCP_CallToolResultContent
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	FString data; // used by `audio` and `image` types
+
+	UPROPERTY()
+	FString text; // used by `text` type
+
+	UPROPERTY()
+	FString mimetype; // used by `audio` and `image` types
+
+	UPROPERTY()
+	FString type;
+
+	//TODO add embedded resource
+};
+
+USTRUCT()
+struct FUMCP_CallToolResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FUMCP_CallToolResultContent> content;
+
+	UPROPERTY()
+	bool isError;
+};
+
+USTRUCT()
 struct FUMCP_ListToolsParams
 {
 	GENERATED_BODY()
 
 	UPROPERTY()
 	FString Cursor;
+};
+
+DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
+
+USTRUCT()
+struct FUMCP_ToolDefinition
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString name;
+
+	UPROPERTY()
+	FString description;
+
+	TSharedPtr<FJsonObject> inputSchema;
+	FUMCP_ToolCall DoToolCall;
+
+	FUMCP_ToolDefinition(): name{}, description{}, inputSchema{ MakeShared<FJsonObject>() }, DoToolCall()
+	{
+		inputSchema->SetStringField(TEXT("type"), TEXT("object"));
+	}
+};
+
+USTRUCT()
+struct FUMCP_ListToolsResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString nextCursor;
+
+	UPROPERTY()
+	TArray<FUMCP_ToolDefinition> tools;
 };
