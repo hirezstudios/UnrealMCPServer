@@ -62,23 +62,6 @@ void FMCPServer::RegisterRpcMethodHandler(const FString& MethodName, JsonRpcHand
 	JsonRpcMethodHandlers.Add(MethodName, Handler);
 }
 
-// Helper to convert FJsonRpcResponse to JSON string
-bool FMCPServer::ConvertRpcResponseToJsonString(const FJsonRpcResponse& RpcResponse, FString& OutJsonString)
-{
-    return RpcResponse.ToJsonString(OutJsonString);
-}
-
-// Helper to convert FJsonRpcErrorObject and RequestId to JSON string (full JSON-RPC error response)
-bool FMCPServer::ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FJsonRpcId& RequestId, FString& OutJsonString)
-{
-    FJsonRpcResponse ErrorResponse;
-    ErrorResponse.error = MakeShared<FJsonRpcErrorObject>(RpcError); // Make a copy for the response
-    ErrorResponse.id = RequestId; // Assign FJsonRpcId directly
-    // ErrorResponse.jsonrpc is defaulted to "2.0"
-
-    return ErrorResponse.ToJsonString(OutJsonString);
-}
-
 // Helper to send a JSON response
 void FMCPServer::SendJsonRpcResponse(const FHttpResultCallback& OnComplete, const FJsonRpcResponse& RpcResponse)
 {

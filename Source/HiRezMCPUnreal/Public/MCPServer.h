@@ -28,8 +28,6 @@ private:
     static const FString PLUGIN_VERSION;
 	
     // Helper methods for sending responses
-    static bool ConvertRpcResponseToJsonString(const FJsonRpcResponse& RpcResponse, FString& OutJsonString);
-    static bool ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FJsonRpcId& RequestId, FString& OutJsonString);
     static void SendJsonRpcResponse(const FHttpResultCallback& OnComplete, const FJsonRpcResponse& Response);
 
 	void RegisterInternalRpcMethodHandlers();
