@@ -37,7 +37,7 @@
 - [ ] **Task 2.3:** Create 1-2 simple example C++ tools.
     - [ ] Example 1: C++ tool (e.g., "LogMessageToUnrealConsole").
     - [ ] Example 2: C++ tool (e.g., "GetBasicEditorInfo").
-- [ ] ~~**Task 2.4:** Implement `notifications/tools/list_changed` server notification.~~ **(Deferred due to no SSE)**
+- [ ] ~~**Task 2.4:** Implement `notifications/tools/list_changed` server notification.~~ **(Deferred, requires SSE)**
 - [ ] **Status:** Not Started
 
 ## Phase 3: Basic Resource Implementation
@@ -48,18 +48,18 @@
     - [ ] Sub-task: Define `FResourceContentParams` and `FResourceContentResult` USTRUCTs.
     - [ ] Sub-task: Implement logic to retrieve resource content (e.g., T3D for a Blueprint).
 - [ ] **Task 3.3:** Implement `get_blueprint_contents` as a specific resource type or via `resources/get_content`.
-- [ ] ~~**Task 3.4:** Implement `notifications/resources/list_changed` server notification.~~ **(Deferred due to no SSE)**
+- [ ] ~~**Task 3.4:** Implement `notifications/resources/content_changed` server notification.~~ **(Deferred, requires SSE)**
 - [ ] **Status:** Not Started
 
-## Phase 4: Advanced Features & Refinements
+## Phase 4: Advanced Features & Refinements (Non-SSE)
 - [ ] **Task 4.1:** Implement Prompts (`prompts/list`, `prompts/get_template`, `prompts/render`) (synchronous responses).
     - [ ] Sub-task: Define `FPromptDefinition`, `FPromptTemplate`, `FPromptRenderParams`, `FPromptRenderResult` USTRUCTs.
-- [ ] ~~**Task 4.2:** Implement resource subscriptions (`resources/subscribe`, `notifications/resources/content_changed`).~~ **(Deferred due to no SSE)**
-- [ ] ~~**Task 4.3:** Implement `$/progress` server notification for long-running tool calls.~~ **(Deferred due to no SSE)**
-- [ ] **Task 4.4:** Implement `$/cancelRequest` client notification.
+- [ ] **Task 4.2:** Implement `$/cancelRequest` client notification.
     - [ ] Sub-task: Server attempts to honor cancellation for ongoing asynchronous tasks.
-- [ ] **Task 4.5:** Robust error handling and reporting as JSON-RPC errors in HTTP responses.
-- [ ] **Task 4.6:** Threading improvements and performance testing (focus on synchronous request handling).
+- [ ] **Task 4.3:** Robust error handling and reporting as JSON-RPC errors in HTTP responses.
+- [ ] **Task 4.4:** Threading improvements and performance testing (focus on synchronous request handling).
+- [ ] **Task 4.5 (Deferred):** Resource subscriptions (`resources/subscribe`, `notifications/resources/content_changed`). **(Deferred, requires SSE)**
+- [ ] **Task 4.6 (Deferred):** Implement `$/progress` server notification for long-running tool calls. **(Deferred, requires SSE)**
 - [ ] **Status:** Not Started
 
 ## Phase 5: Security & Deployment
@@ -71,7 +71,7 @@
 - [ ] **Status:** Not Started
 
 ## Future Considerations (Post-Initial Implementation)
-- [ ] Implement Server-Sent Events (SSE) to enable server-initiated notifications and related capabilities (`tools/list_changed`, `resources/content_changed`, `$/progress`, resource subscriptions).
+- [ ] Implement Server-Sent Events (SSE) components of Streamable HTTP (including `Content-Type: text/event-stream` responses, client GET support for server-initiated streams, and features like `notifications/tools/list_changed`, `notifications/resources/content_changed`, `$/progress`, and `resources/subscribe`).
 - [ ] Implement Server-initiated Sampling (`sampling/createMessage`).
 - [ ] Implement Client-exposed Roots (`roots/list`).
 - [ ] Explore advanced tool output (structured content beyond text/image).
