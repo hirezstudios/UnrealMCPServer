@@ -143,6 +143,18 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
     if (RpcRequest.method == TEXT("initialize"))
     {
         FInitializeParams InitParams;
+        if (RpcRequest.params.IsValid())
+        {
+            FString ParamsJsonString;
+            auto Writer = TJsonWriterFactory<>::Create(&ParamsJsonString);
+            FJsonSerializer::Serialize(RpcRequest.params.ToSharedRef(), Writer);
+            UE_LOG(LogHiRezMCP, Warning, TEXT("Received 'initialize' params JSON: %s"), *ParamsJsonString);
+        }
+        else
+        {
+            UE_LOG(LogHiRezMCP, Warning, TEXT("'initialize' request params object is null or invalid."));
+        }
+
         if (RpcRequest.params.IsValid() && FInitializeParams::CreateFromJsonObject(RpcRequest.params, InitParams))
         {
             UE_LOG(LogHiRezMCP, Log, TEXT("Handling 'initialize' method. Client protocol version: %s"), *InitParams.protocolVersion);

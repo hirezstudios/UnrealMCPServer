@@ -61,7 +61,54 @@ struct FJsonRpcRequest
 
     static bool CreateFromJsonString(const FString& JsonString, FJsonRpcRequest& OutRequest)
     {
-        return FJsonObjectConverter::JsonObjectStringToUStruct(JsonString, &OutRequest, 0, 0);
+        TSharedPtr<FJsonObject> RootJsonObject;
+        TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
+
+        if (!FJsonSerializer::Deserialize(Reader, RootJsonObject) || !RootJsonObject.IsValid())
+        {
+            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Failed to deserialize JsonString to RootJsonObject. String: %s"), *JsonString);
+            return false;
+        }
+
+        // Check for required fields first
+        if (!RootJsonObject->HasTypedField<EJson::String>(TEXT("jsonrpc")) ||
+            !RootJsonObject->HasTypedField<EJson::String>(TEXT("method")))
+        {
+            UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Missing 'jsonrpc' or 'method' in request. String: %s"), *JsonString);
+            return false;
+        }
+
+        OutRequest.jsonrpc = RootJsonObject->GetStringField(TEXT("jsonrpc"));
+        OutRequest.method = RootJsonObject->GetStringField(TEXT("method"));
+
+        // ID is optional for notifications, can be string or number. We use FString.
+        if (RootJsonObject->HasTypedField<EJson::String>(TEXT("id")))
+        {
+            OutRequest.id = RootJsonObject->GetStringField(TEXT("id"));
+        }
+        else if (RootJsonObject->HasTypedField<EJson::Number>(TEXT("id")))
+        {
+            // Convert number ID to string
+            OutRequest.id = FString::Printf(TEXT("%g"), RootJsonObject->GetNumberField(TEXT("id")));
+        }
+        else
+        {
+            OutRequest.id.Empty(); // No ID or null ID
+        }
+        
+        if (RootJsonObject->HasTypedField<EJson::Object>(TEXT("params")))
+        {
+            OutRequest.params = RootJsonObject->GetObjectField(TEXT("params"));
+        }
+        else
+        {
+            // Params are optional, so if not present or not an object, OutRequest.params remains nullptr.
+            // This is valid for methods that don't require params. If 'initialize' is called without params,
+            // the subsequent check 'RpcRequest.params.IsValid()' will correctly fail for it.
+            OutRequest.params = nullptr; 
+        }
+
+        return true;
     }
 };
 
