@@ -32,9 +32,9 @@ An HTTP server will be embedded within the plugin to handle MCP communications u
     *   The server responds based on the request and its capabilities:
         *   `HTTP 202 Accepted` (no body): If the POST contained only JSON-RPC responses or notifications.
         *   `Content-Type: application/json`: For a single JSON-RPC response to client requests.
-        *   `Content-Type: text/event-stream`: To initiate an SSE stream for multiple/ongoing messages or server-initiated notifications related to the client's request.
-    *   Clients MAY also use HTTP GET (with `Accept: text/event-stream`) to the MCP endpoint to request a server-initiated SSE stream.
-    *   SSE is an *optional component* of Streamable HTTP, employed by the server when streaming is appropriate. It is not a standalone, always-on requirement.
+        *   `Content-Type: text/event-stream`: To initiate an SSE stream for multiple/ongoing messages or server-initiated notifications related to the client's request. **(Deferred for initial implementation)**
+    *   Clients MAY also use HTTP GET (with `Accept: text/event-stream`) to the MCP endpoint to request a server-initiated SSE stream. **(Deferred for initial implementation)**
+    *   SSE is an *optional component* of Streamable HTTP, employed by the server when streaming is appropriate. It is not a standalone, always-on requirement. **For the initial implementation, support for all SSE-related capabilities (including `Content-Type: text/event-stream` responses and client GET for server-initiated streams) is deferred. The server will initially only support `Content-Type: application/json` responses to client POST requests.**
 *   **Options for HTTP Server:**
     1.  **Unreal Engine's `FHttpServerModule`:**
         *   Leverages built-in engine capabilities (`IHttpRouter`, `FHttpServerResponse`).
@@ -136,17 +136,17 @@ A single base path (e.g., `/mcp`) will be used for all MCP communication.
         *   If the POST body consists solely of JSON-RPC responses or notifications, and the server accepts the input, it MUST return an `HTTP 202 Accepted` with no body.
         *   If the POST body contains any JSON-RPC requests, the server MUST respond with either:
             *   `Content-Type: application/json`: The HTTP response body contains a single JSON-RPC Response.
-            *   `Content-Type: text/event-stream`: The server initiates an SSE stream. This stream SHOULD eventually include one JSON-RPC response for each JSON-RPC request sent in the POST. The server MAY send other JSON-RPC requests or notifications to the client over this stream.
+            *   `Content-Type: text/event-stream`: The server initiates an SSE stream. This stream SHOULD eventually include one JSON-RPC response for each JSON-RPC request sent in the POST. The server MAY send other JSON-RPC requests or notifications to the client over this stream. **(Deferred for initial implementation)**
 *   **HTTP GET `/mcp`:**
-    *   Clients MAY issue an HTTP GET request to the MCP endpoint to open an SSE stream for server-initiated messages.
+    *   Clients MAY issue an HTTP GET request to the MCP endpoint to open an SSE stream for server-initiated messages. **(Deferred for initial implementation)**
     *   Client MUST include `Accept: text/event-stream` header.
     *   The server MUST either respond with `Content-Type: text/event-stream` (establishing SSE) or `HTTP 405 Method Not Allowed` if it doesn't support GET for streaming.
 *   **Session Management:** The server uses the `Mcp-Session-Id` HTTP header to manage sessions if implemented. If a client receives a session ID, it MUST include it on subsequent requests for that session.
 
 ### 4.2. Server-to-Client Message Delivery
 
-*   MCP JSON-RPC **Responses** to client requests are delivered either as a single JSON object in the HTTP POST response body (`Content-Type: application/json`) or as individual messages within an SSE stream (`Content-Type: text/event-stream`) initiated in response to the POST.
-*   Server-initiated MCP JSON-RPC **Requests** or **Notifications** (e.g., `notifications/tools/list_changed`, `$/progress`) can be sent over an active SSE stream. This stream might be initiated in response to a client's POST or GET request.
+*   MCP JSON-RPC **Responses** to client requests are delivered either as a single JSON object in the HTTP POST response body (`Content-Type: application/json`) or as individual messages within an SSE stream (`Content-Type: text/event-stream`) initiated in response to the POST. **(Initial implementation will only support `Content-Type: application/json` responses).**
+*   Server-initiated MCP JSON-RPC **Requests** or **Notifications** (e.g., `notifications/tools/list_changed`, `$/progress`) can be sent over an active SSE stream. This stream might be initiated in response to a client's POST or GET request. **(Support for SSE streams, and thus these asynchronous messages, is deferred for the initial implementation).**
 
 ### 4.3. Security Considerations
 
@@ -181,7 +181,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
         *   Execution must be on a worker thread if potentially long-running. Use `$/progress` for updates if streaming.
     *   Output: `FToolCallResult` (containing `contentType`, `content`). `ContentPart`s (text, image) need to be supported.
 *   **`notifications/tools/list_changed`:**
-    *   Sent when the set of available tools changes. Requires server capability `tools: { "listChanged": true }`. (Can be implemented via the SSE component of Streamable HTTP).
+    *   Sent when the set of available tools changes. Requires server capability `tools: { "listChanged": true }`. **(Deferred as it requires SSE)**.
 
 ### 5.2. Resources
 
@@ -196,7 +196,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
     *   This is where the "get_blueprint_contents" feature from the initial memory fits.
 *   **`resources/subscribe` & `notifications/resources/content_changed`:**
     *   Allows clients to subscribe to changes in a resource.
-    *   Requires server capability `resources: { "subscribe": true }`. (Can be implemented via the SSE component of Streamable HTTP).
+    *   Requires server capability `resources: { "subscribe": true }`. **(Deferred as it requires SSE)**.
     *   Mechanisms like `FCoreUObjectDelegates::OnObjectModified` or asset-specific callbacks could trigger notifications.
 
 ### 5.3. Prompts
@@ -211,7 +211,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 ### 5.4. Utilities
 
 *   **`ping`:** Simple request/response to check connectivity (standard JSON-RPC response).
-*   **`$/progress`:** Server sends this notification for long-running tool calls. (Can be implemented via the SSE component of Streamable HTTP if the server chooses to stream updates for a particular tool call).
+*   **`$/progress`:** Server sends this notification for long-running tool calls. **(Deferred as it requires SSE)**.
 *   **`$/cancelRequest`:** Client sends this to request cancellation of an operation. Server should attempt to honor it.
 
 ## 6. Data Structures and Schema Adherence (UE C++)
@@ -246,21 +246,20 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 2.  **Phase 2: Basic Tool Implementation**
     *   Implement `tools/list` and `tools/call` (synchronous responses).
     *   Create 1-2 simple example C++ tools (e.g., a tool to log a message, a tool to query basic editor state).
-    *   Implement `notifications/tools/list_changed` via SSE.
+    *   `notifications/tools/list_changed` **(Deferred, requires SSE)**.
 3.  **Phase 3: Basic Resource Implementation**
     *   Implement `resources/list` and `resources/get_content` (synchronous responses).
     *   Implement `get_blueprint_contents` as a resource.
-    *   Implement `notifications/resources/content_changed` via SSE.
-4.  **Phase 4: Advanced Features & Refinements**
+    *   `notifications/resources/content_changed` **(Deferred, requires SSE)**.
+4.  **Phase 4: Advanced Features & Refinements (Non-SSE)**
     *   Implement Prompts.
-    *   Implement resource subscriptions (`resources/subscribe`, `notifications/resources/content_changed`) via SSE.
-    *   Implement `$/progress` and `$/cancelRequest`.
+    *   Implement `$/cancelRequest`.
     *   Robust error handling and logging.
     *   Threading improvements and performance testing.
+    *   Resource subscriptions (`resources/subscribe`) and `$/progress` **(Deferred, requires SSE)**.
 5.  **Phase 5: Security & Deployment**
     *   Implement TLS (HTTPS).
     *   Configuration options.
-    *   Packaging and testing.
 
 ## 10. Open Questions & Risks
 
@@ -272,6 +271,7 @@ USTRUCTs will be defined for all MCP data types (ToolDefinition, Resource, Promp
 
 ## 11. Future Considerations (Post-MVP)
 
+*   Implement SSE components of Streamable HTTP (including `Content-Type: text/event-stream` responses, client GET support for server-initiated streams, and features like `$/progress`, `notifications/tools/list_changed`, `notifications/resources/content_changed`, and `resources/subscribe`).
 *   Server-initiated Sampling (`sampling/createMessage`).
 *   Client-exposed Roots (`roots/list`).
 *   Structured output from tools (beyond simple text/binary).
