@@ -88,12 +88,7 @@ void FHiRezMCPUnrealModule::StopHttpServer()
 // Helper to convert FJsonRpcResponse to JSON string
 bool FHiRezMCPUnrealModule::ConvertRpcResponseToJsonString(const FJsonRpcResponse& RpcResponse, FString& OutJsonString)
 {
-    TSharedPtr<FJsonObject> JsonObject = FJsonObjectConverter::UStructToJsonObject(RpcResponse);
-    if (JsonObject.IsValid())
-    {
-        return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
-    }
-    return false;
+    return RpcResponse.ToJsonString(OutJsonString);
 }
 
 // Helper to convert FJsonRpcErrorObject and RequestId to JSON string (full JSON-RPC error response)
@@ -101,46 +96,20 @@ bool FHiRezMCPUnrealModule::ConvertRpcErrorToJsonString(const FJsonRpcErrorObjec
 {
     FJsonRpcResponse ErrorResponse;
     ErrorResponse.id = RequestId;
-    // Need to use MakeShared to assign to TSharedPtr for USTRUCTs within USTRUCTs if they are to be serialized properly by FJsonObjectConverter
-    ErrorResponse.error = MakeShared<FJsonRpcErrorObject>(RpcError); 
+    ErrorResponse.error = MakeShared<FJsonRpcErrorObject>(RpcError); // FJsonRpcErrorObject is a USTRUCT, needs to be on heap for TSharedPtr
 
-    TSharedPtr<FJsonObject> JsonObject = FJsonObjectConverter::UStructToJsonObject(ErrorResponse);
-    if (JsonObject.IsValid())
-    {
-        return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
-    }
-    return false;
+    return ErrorResponse.ToJsonString(OutJsonString);
 }
 
 // Helper to send a JSON response
 void FHiRezMCPUnrealModule::SendJsonResponse(const FHttpResultCallback& OnComplete, const FString& JsonPayload, bool bSuccess)
 {
     TUniquePtr<FHttpServerResponse> Response = FHttpServerResponse::Create(JsonPayload, TEXT("application/json"));
-    Response->Code = bSuccess ? EHttpServerResponseCodes::Ok : EHttpServerResponseCodes::BadRequest;
+    Response->Code = EHttpServerResponseCodes::Ok;
     OnComplete(MoveTemp(Response));
 }
 
-// Helper to send a simple JSON-RPC error response
-void FHiRezMCPUnrealModule::SendSimpleErrorResponse(const FHttpResultCallback& OnComplete, const FString& RequestId, int32 ErrorCode, const FString& ErrorMessage)
-{
-    FJsonRpcErrorObject RpcError;
-    RpcError.code = ErrorCode;
-    RpcError.message = ErrorMessage;
-
-    FString ErrorJsonString;
-    if (ConvertRpcErrorToJsonString(RpcError, RequestId, ErrorJsonString))
-    {
-        SendJsonResponse(OnComplete, ErrorJsonString, false);
-    }
-    else
-    {
-        // Fallback if error serialization fails (should not happen ideally)
-        TUniquePtr<FHttpServerResponse> FallbackResponse = FHttpServerResponse::Create(TEXT("{\"jsonrpc\": \"2.0\", \"error\": {\"code\": -32000, \"message\": \"Server error during error serialization\"}, \"id\": null}"), TEXT("application/json"));
-        FallbackResponse->Code = EHttpServerResponseCodes::ServerError;
-        OnComplete(MoveTemp(FallbackResponse));
-    }
-}
-
+// Main handler for MCP requests, runs on an HTTP thread
 void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
 	FUTF8ToTCHAR Convert((ANSICHAR*)Request.Body.GetData(), Request.Body.Num());
@@ -150,17 +119,23 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
     UE_LOG(LogHiRezMCP, Verbose, TEXT("Received MCP request: %s"), *RequestBody);
 
     FJsonRpcRequest RpcRequest;
-    if (!FJsonObjectConverter::JsonObjectStringToUStruct(RequestBody, &RpcRequest, 0, 0))
+    if (!FJsonRpcRequest::CreateFromJsonString(RequestBody, RpcRequest))
     {
-        UE_LOG(LogHiRezMCP, Error, TEXT("Failed to parse JSON-RPC request: %s"), *RequestBody);
-        SendSimpleErrorResponse(OnComplete, TEXT(""), -32700, TEXT("Parse error")); // ID might be unknown here
+        UE_LOG(LogHiRezMCP, Error, TEXT("Failed to parse MCP request JSON: %s"), *RequestBody);
+        FJsonRpcErrorObject ErrorObj(EMCPErrorCode::ParseError, TEXT("Failed to parse MCP request JSON"));
+        FString ErrorJsonString;
+        ConvertRpcErrorToJsonString(ErrorObj, TEXT(""), ErrorJsonString);
+        SendJsonResponse(OnComplete, ErrorJsonString, false);
         return;
     }
 
     if (RpcRequest.jsonrpc != TEXT("2.0"))
     {
         UE_LOG(LogHiRezMCP, Error, TEXT("Invalid JSON-RPC version: %s"), *RpcRequest.jsonrpc);
-        SendSimpleErrorResponse(OnComplete, RpcRequest.id, -32600, TEXT("Invalid Request - JSON-RPC version must be 2.0"));
+        FJsonRpcErrorObject ErrorObj(EMCPErrorCode::InvalidRequest, TEXT("Invalid Request - JSON-RPC version must be 2.0"));
+        FString ErrorJsonString;
+        ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+        SendJsonResponse(OnComplete, ErrorJsonString, false);
         return;
     }
 
@@ -168,48 +143,70 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
     if (RpcRequest.method == TEXT("initialize"))
     {
         FInitializeParams InitParams;
-        if (RpcRequest.params.IsValid() && FJsonObjectConverter::JsonObjectToUStruct(RpcRequest.params.ToSharedRef(), &InitParams, 0, 0))
+        if (RpcRequest.params.IsValid() && FInitializeParams::CreateFromJsonObject(RpcRequest.params, InitParams))
         {
             UE_LOG(LogHiRezMCP, Log, TEXT("Handling 'initialize' method. Client protocol version: %s"), *InitParams.protocolVersion);
 
             FInitializeResult InitResult;
             InitResult.protocolVersion = MCP_PROTOCOL_VERSION; // Server's supported version
             
-            // Populate ServerInfo
-            InitResult.serverInfo->name = TEXT("HiRezMCPUnreal");
-            InitResult.serverInfo->version = PLUGIN_VERSION;
-            InitResult.serverInfo->HirezMCPUnreal_version = PLUGIN_VERSION;
+            // Populate ServerInfo - using direct member access now
+            InitResult.serverInfo.name = TEXT("HiRezMCPUnreal");
+            InitResult.serverInfo.version = PLUGIN_VERSION;
+            InitResult.serverInfo.HirezMCPUnreal_version = PLUGIN_VERSION;
             if (GEngine)
             {
-                InitResult.serverInfo->unreal_engine_version = FEngineVersion::Current().ToString(EVersionComponent::Patch);
+                InitResult.serverInfo.unreal_engine_version = FEngineVersion::Current().ToString(EVersionComponent::Patch);
             }
             else
             {
-                InitResult.serverInfo->unreal_engine_version = TEXT("Unknown");
+                InitResult.serverInfo.unreal_engine_version = TEXT("Unknown");
             }
 
             // Populate ServerCapabilities (defaults are fine for now as defined in MCPTypes.h constructors)
-            // Note: listChanged and subscribe capabilities are false by default due to no SSE.
+            // FServerCapabilities members are default-initialized. Example: InitResult.serverCapabilities.tools.inputSchema = true;
 
             FJsonRpcResponse RpcResponse;
             RpcResponse.id = RpcRequest.id;
-            RpcResponse.result = FJsonObjectConverter::UStructToJsonObject(InitResult);
+            TSharedPtr<FJsonObject> ResultJsonObject;
+            if (InitResult.ToJsonObject(ResultJsonObject))
+            {
+                RpcResponse.result = ResultJsonObject;
+            }
+            else
+            {
+                UE_LOG(LogHiRezMCP, Error, TEXT("Failed to serialize FInitializeResult to JSON object."));
+                // This case should ideally not happen if ToJsonObject is implemented correctly
+                // and FJsonObjectConverter::UStructToJsonObject works for InitResult.
+                // Send a generic server error if it does.
+                FJsonRpcErrorObject ErrorObj(EMCPErrorCode::InternalError, TEXT("Failed to serialize initialize result"));
+                FString ErrorJsonString;
+                ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+                SendJsonResponse(OnComplete, ErrorJsonString, false);
+                return;
+            }
 
             FString ResponseJsonString;
-            if (ConvertRpcResponseToJsonString(RpcResponse, ResponseJsonString))
+            if (RpcResponse.ToJsonString(ResponseJsonString))
             {
                 SendJsonResponse(OnComplete, ResponseJsonString, true);
             }
             else
             {
                 UE_LOG(LogHiRezMCP, Error, TEXT("Failed to serialize 'initialize' response."));
-                SendSimpleErrorResponse(OnComplete, RpcRequest.id, -32603, TEXT("Internal error - Failed to serialize response"));
+                FJsonRpcErrorObject ErrorObj(EMCPErrorCode::InternalError, TEXT("Internal error - Failed to serialize response"));
+                FString ErrorJsonString;
+                ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+                SendJsonResponse(OnComplete, ErrorJsonString, false);
             }
         }
         else
         {
             UE_LOG(LogHiRezMCP, Error, TEXT("Failed to parse 'initialize' params."));
-            SendSimpleErrorResponse(OnComplete, RpcRequest.id, -32602, TEXT("Invalid params - Could not parse initialize parameters"));
+            FJsonRpcErrorObject ErrorObj(EMCPErrorCode::InvalidParams, TEXT("Failed to parse 'initialize' params"));
+            FString ErrorJsonString;
+            ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+            SendJsonResponse(OnComplete, ErrorJsonString, false);
         }
     }
     else if (RpcRequest.method == TEXT("notifications/initialized"))
@@ -231,20 +228,26 @@ void FHiRezMCPUnrealModule::HandleGeneralMCPRequest(const FHttpServerRequest& Re
         RpcResponse.result = MakeShared<FJsonObject>(); 
 
         FString ResponseJsonString;
-        if (ConvertRpcResponseToJsonString(RpcResponse, ResponseJsonString))
+        if (RpcResponse.ToJsonString(ResponseJsonString))
         {
             SendJsonResponse(OnComplete, ResponseJsonString, true);
         }
         else
         {
             UE_LOG(LogHiRezMCP, Error, TEXT("Failed to serialize 'ping' response."));
-            SendSimpleErrorResponse(OnComplete, RpcRequest.id, -32603, TEXT("Internal error - Failed to serialize ping response"));
+            FJsonRpcErrorObject ErrorObj(EMCPErrorCode::InternalError, TEXT("Internal error - Failed to serialize ping response"));
+            FString ErrorJsonString;
+            ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+            SendJsonResponse(OnComplete, ErrorJsonString, false);
         }
     }
     else
     {
         UE_LOG(LogHiRezMCP, Warning, TEXT("Unknown MCP method received: %s"), *RpcRequest.method);
-        SendSimpleErrorResponse(OnComplete, RpcRequest.id, -32601, TEXT("Method not found"));
+        FJsonRpcErrorObject ErrorObj(EMCPErrorCode::MethodNotFound, FString::Printf(TEXT("Method not found: %s"), *RpcRequest.method));
+        FString ErrorJsonString;
+        ConvertRpcErrorToJsonString(ErrorObj, RpcRequest.id, ErrorJsonString);
+        SendJsonResponse(OnComplete, ErrorJsonString, false);
     }
 }
 

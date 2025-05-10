@@ -39,7 +39,6 @@ private:
     static bool ConvertRpcResponseToJsonString(const FJsonRpcResponse& RpcResponse, FString& OutJsonString);
     static bool ConvertRpcErrorToJsonString(const FJsonRpcErrorObject& RpcError, const FString& RequestId, FString& OutJsonString);
     static void SendJsonResponse(const FHttpResultCallback& OnComplete, const FString& JsonPayload, bool bSuccess = true);
-    static void SendSimpleErrorResponse(const FHttpResultCallback& OnComplete, const FString& RequestId, int32 ErrorCode, const FString& ErrorMessage);
 
     TSharedPtr<IHttpRouter> HttpRouter;
     uint32 HttpServerPort = 30069; // Default MCP port for this plugin
