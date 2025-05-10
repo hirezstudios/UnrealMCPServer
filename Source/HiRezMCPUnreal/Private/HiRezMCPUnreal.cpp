@@ -1,5 +1,5 @@
 #include "HiRezMCPUnreal.h"
-#include "MCPServer.h"
+#include "UMCP_Server.h"
 
 // Define the log category
 DEFINE_LOG_CATEGORY(LogHiRezMCP);
@@ -7,7 +7,7 @@ DEFINE_LOG_CATEGORY(LogHiRezMCP);
 void FHiRezMCPUnrealModule::StartupModule()
 {
 	UE_LOG(LogHiRezMCP, Warning, TEXT("HiRezMCPUnrealModule has started"));
-	Server = MakeUnique<FMCPServer>();
+	Server = MakeUnique<FUMCP_Server>();
 	if (Server)
 	{
 		Server->StartServer();

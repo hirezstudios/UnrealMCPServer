@@ -13,5 +13,5 @@ public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 private:
-	TUniquePtr<class FMCPServer> Server;
+	TUniquePtr<class FUMCP_Server> Server;
 };

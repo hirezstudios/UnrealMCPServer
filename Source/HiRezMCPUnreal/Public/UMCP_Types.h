@@ -5,10 +5,10 @@
 #include "Templates/SharedPointer.h"
 #include "JsonUtilities.h" // For FJsonObjectConverter
 #include "Serialization/JsonSerializer.h" // For FJsonSerializer
-#include "MCPTypes.generated.h"
+#include "UMCP_Types.generated.h"
 
 // Standard JSON-RPC 2.0 Error Codes & MCP Specific Codes
-enum class EMCPErrorCode : int32
+enum class EUMCP_JsonRpcErrorCode : int32
 {
     // Standard JSON-RPC 2.0 Error Codes
     ParseError = -32700,
@@ -28,7 +28,7 @@ enum class EMCPErrorCode : int32
 // Represents a JSON-RPC Request ID, which can be a string, number, or null.
 // Also handles the concept of an "absent" ID for notifications that don't send one.
 USTRUCT()
-struct FJsonRpcId
+struct FUMCP_JsonRpcId
 {
     GENERATED_BODY()
 
@@ -37,16 +37,16 @@ private:
     TSharedPtr<FJsonValue> Value;
 
     // Private constructor for internal use by static factories or specific type constructors
-    FJsonRpcId(TSharedPtr<FJsonValue> InValue) : Value(InValue) {}
+    FUMCP_JsonRpcId(TSharedPtr<FJsonValue> InValue) : Value(InValue) {}
 
 public:
     // Default constructor: Represents an absent ID (e.g. for notifications or when ID field is missing).
-    FJsonRpcId() : Value(nullptr) {}
-    FJsonRpcId(const FString& InString) : Value(MakeShared<FJsonValueString>(InString)) {}
-    FJsonRpcId(int32 InNumber) : Value(MakeShared<FJsonValueNumber>(static_cast<double>(InNumber))) {}
+    FUMCP_JsonRpcId() : Value(nullptr) {}
+    FUMCP_JsonRpcId(const FString& InString) : Value(MakeShared<FJsonValueString>(InString)) {}
+    FUMCP_JsonRpcId(int32 InNumber) : Value(MakeShared<FJsonValueNumber>(static_cast<double>(InNumber))) {}
 
-    static FJsonRpcId CreateNullId();
-    static FJsonRpcId CreateFromJsonValue(const TSharedPtr<FJsonValue>& JsonValue);
+    static FUMCP_JsonRpcId CreateNullId();
+    static FUMCP_JsonRpcId CreateFromJsonValue(const TSharedPtr<FJsonValue>& JsonValue);
     bool IsString() const;
     bool IsNumber() const;
     bool IsNull() const;
@@ -56,10 +56,10 @@ public:
 };
 
 // Forward declaration
-struct FJsonRpcErrorObject;
+struct FUMCP_JsonRpcError;
 
 USTRUCT()
-struct FJsonRpcRequest
+struct FUMCP_JsonRpcRequest
 {
     GENERATED_BODY()
 
@@ -70,15 +70,15 @@ struct FJsonRpcRequest
     FString method;
 
     TSharedPtr<FJsonObject> params; // Using TSharedPtr<FJsonObject> for params
-    FJsonRpcId id;
+    FUMCP_JsonRpcId id;
 
-    FJsonRpcRequest() : jsonrpc(TEXT("2.0")) {}
+    FUMCP_JsonRpcRequest() : jsonrpc(TEXT("2.0")) {}
     bool ToJsonString(FString& OutJsonString) const;
-    static bool CreateFromJsonString(const FString& JsonString, FJsonRpcRequest& OutRequest);
+    static bool CreateFromJsonString(const FString& JsonString, FUMCP_JsonRpcRequest& OutRequest);
 };
 
 USTRUCT()
-struct FJsonRpcErrorObject
+struct FUMCP_JsonRpcError
 {
     GENERATED_BODY()
 
@@ -91,17 +91,17 @@ struct FJsonRpcErrorObject
     // data can be any JSON value, using FJsonValue to represent it.
     TSharedPtr<FJsonValue> data; 
 
-    FJsonRpcErrorObject() : code(0) {}
-    FJsonRpcErrorObject(EMCPErrorCode InErrorCode, const FString& InMessage, TSharedPtr<FJsonValue> InData = nullptr)
+    FUMCP_JsonRpcError() : code(0) {}
+    FUMCP_JsonRpcError(EUMCP_JsonRpcErrorCode InErrorCode, const FString& InMessage, TSharedPtr<FJsonValue> InData = nullptr)
         : code(static_cast<int32>(InErrorCode)), message(InMessage), data(InData) {}
-	void SetError(EMCPErrorCode error) { code = static_cast<int32>(error); }
+	void SetError(EUMCP_JsonRpcErrorCode error) { code = static_cast<int32>(error); }
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FJsonRpcErrorObject& OutErrorObject);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_JsonRpcError& OutErrorObject);
 };
 
 USTRUCT()
-struct FJsonRpcResponse
+struct FUMCP_JsonRpcResponse
 {
     GENERATED_BODY()
 
@@ -109,23 +109,23 @@ struct FJsonRpcResponse
     FString jsonrpc; // Should be "2.0"
 
     // ID is now FJsonRpcId to encapsulate its type (string, number, null, or absent)
-    FJsonRpcId id;
+    FUMCP_JsonRpcId id;
 
     // Result can be any valid JSON value (object, array, string, number, boolean, null)
     TSharedPtr<FJsonValue> result; 
     
-    TSharedPtr<FJsonRpcErrorObject> error; // Error object if an error occurred
+    TSharedPtr<FUMCP_JsonRpcError> error; // Error object if an error occurred
 
-    FJsonRpcResponse() : jsonrpc(TEXT("2.0")) {}
+    FUMCP_JsonRpcResponse() : jsonrpc(TEXT("2.0")) {}
 
     bool ToJsonString(FString& OutJsonString) const;
-    static bool CreateFromJsonString(const FString& JsonString, FJsonRpcResponse& OutResponse);
+    static bool CreateFromJsonString(const FString& JsonString, FUMCP_JsonRpcResponse& OutResponse);
 };
 
 // MCP Specific Structures
 
 USTRUCT()
-struct FServerInformation
+struct FUMCP_ServerInfo
 {
     GENERATED_BODY()
 
@@ -135,21 +135,15 @@ struct FServerInformation
     UPROPERTY()
     FString version; // e.g., "0.1.0"
 
-    UPROPERTY()
-    FString HirezMCPUnreal_version;
-
-    UPROPERTY()
-    FString unreal_engine_version;
-
     // Could add more fields like 'documentationUrl', 'icon', etc. as needed
-    FServerInformation() : name(TEXT("HiRezMCPUnreal")) {}
+    FUMCP_ServerInfo() : name(TEXT("HiRezMCPUnreal")) {}
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FServerInformation& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerInfo& OutStruct);
 };
 
 USTRUCT()
-struct FToolServerCapabilities
+struct FUMCP_ServerCapabilitiesTools
 {
     GENERATED_BODY()
 
@@ -162,14 +156,14 @@ struct FToolServerCapabilities
     UPROPERTY()
     bool outputSchema = false; // Whether server supports 'outputSchema' in ToolDefinition
 
-    FToolServerCapabilities() = default; // Added default constructor
+    FUMCP_ServerCapabilitiesTools() = default; // Added default constructor
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FToolServerCapabilities& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesTools& OutStruct);
 };
 
 USTRUCT()
-struct FResourceServerCapabilities
+struct FUMCP_ServerCapabilitiesResources
 {
     GENERATED_BODY()
 
@@ -179,51 +173,51 @@ struct FResourceServerCapabilities
     UPROPERTY()
     bool subscribe = false; // Deferred as SSE is deferred
 
-    UPROPERTY()
-    bool contentTypes = false; // If server provides 'contentTypes' in ResourceDefinition
-
-    FResourceServerCapabilities() = default; // Added default constructor
+    FUMCP_ServerCapabilitiesResources() = default; // Added default constructor
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FResourceServerCapabilities& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesResources& OutStruct);
 };
 
 USTRUCT()
-struct FPromptServerCapabilities
+struct FUMCP_ServerCapabilitiesPrompts
 {
     GENERATED_BODY()
 
     UPROPERTY()
     bool listChanged = false; // Deferred as SSE is deferred
 
-    FPromptServerCapabilities() = default; // Added default constructor
+    FUMCP_ServerCapabilitiesPrompts() = default; // Added default constructor
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FPromptServerCapabilities& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesPrompts& OutStruct);
 };
 
 USTRUCT()
-struct FServerCapabilities // Add more capability structs as needed (e.g., roots, sampling)
+struct FUMCP_ServerCapabilities // Add more capability structs as needed (e.g., roots, sampling)
 {
     GENERATED_BODY()
 
-    UPROPERTY()
-    FToolServerCapabilities tools;
+	//UPROPERTY()
+	//FUMCP_ServerCapabilitiesLogging logging;
 
     UPROPERTY()
-    FResourceServerCapabilities resources;
+    FUMCP_ServerCapabilitiesTools tools;
 
     UPROPERTY()
-    FPromptServerCapabilities prompts;
+    FUMCP_ServerCapabilitiesResources resources;
 
-    FServerCapabilities() = default; // Default constructor is fine, members will be default-initialized
+    UPROPERTY()
+    FUMCP_ServerCapabilitiesPrompts prompts;
+
+    FUMCP_ServerCapabilities() = default; // Default constructor is fine, members will be default-initialized
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FServerCapabilities& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilities& OutStruct);
 };
 
 USTRUCT()
-struct FInitializeParams
+struct FUMCP_InitializeParams
 {
     GENERATED_BODY()
 
@@ -233,13 +227,17 @@ struct FInitializeParams
     // Client capabilities can be added here later if needed for negotiation
     // UPROPERTY()
     // TSharedPtr<FClientCapabilities> capabilities;
+	
+    // Client capabilities can be added here later if needed for negotiation
+    // UPROPERTY()
+    // TSharedPtr<FJsonObject> clientInfo;
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FInitializeParams& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeParams& OutStruct);
 };
 
 USTRUCT()
-struct FInitializeResult
+struct FUMCP_InitializeResult
 {
     GENERATED_BODY()
 
@@ -247,13 +245,13 @@ struct FInitializeResult
     FString protocolVersion; // Server's chosen protocol version
 
     UPROPERTY()
-    FServerInformation serverInfo;
+    FUMCP_ServerInfo serverInfo;
 
     UPROPERTY()
-    FServerCapabilities capabilities;
+    FUMCP_ServerCapabilities capabilities;
 
-    FInitializeResult() = default; // Default constructor is fine, members will be default-initialized
+    FUMCP_InitializeResult() = default; // Default constructor is fine, members will be default-initialized
 
     bool ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const;
-    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FInitializeResult& OutStruct);
+    static bool CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeResult& OutStruct);
 };

@@ -1,25 +1,25 @@
 ﻿
-#include "MCPTypes.h"
+#include "UMCP_Types.h"
 
 
-FJsonRpcId FJsonRpcId::CreateNullId()
+FUMCP_JsonRpcId FUMCP_JsonRpcId::CreateNullId()
 {
-	return FJsonRpcId(MakeShared<FJsonValueNull>());
+	return FUMCP_JsonRpcId(MakeShared<FJsonValueNull>());
 }
 
-FJsonRpcId FJsonRpcId::CreateFromJsonValue(const TSharedPtr<FJsonValue>& JsonValue)
+FUMCP_JsonRpcId FUMCP_JsonRpcId::CreateFromJsonValue(const TSharedPtr<FJsonValue>& JsonValue)
 {
 	// If JsonValue is nullptr (e.g. field was not found in JsonObject), this correctly results in an 'absent' ID.
 	// If JsonValue is a valid FJsonValueNull, it correctly results in a 'null' ID.
-	return FJsonRpcId(JsonValue);
+	return FUMCP_JsonRpcId(JsonValue);
 }
 
 // Type checking methods
-bool FJsonRpcId::IsString() const { return Value.IsValid() && Value->Type == EJson::String; }
-bool FJsonRpcId::IsNumber() const { return Value.IsValid() && Value->Type == EJson::Number; }
-bool FJsonRpcId::IsNull() const { return !Value.IsValid() || Value->Type == EJson::Null; }
+bool FUMCP_JsonRpcId::IsString() const { return Value.IsValid() && Value->Type == EJson::String; }
+bool FUMCP_JsonRpcId::IsNumber() const { return Value.IsValid() && Value->Type == EJson::Number; }
+bool FUMCP_JsonRpcId::IsNull() const { return !Value.IsValid() || Value->Type == EJson::Null; }
 
-TSharedPtr<FJsonValue> FJsonRpcId::GetJsonValue() const 
+TSharedPtr<FJsonValue> FUMCP_JsonRpcId::GetJsonValue() const 
 {
 	if (!Value.IsValid())
 	{
@@ -31,7 +31,7 @@ TSharedPtr<FJsonValue> FJsonRpcId::GetJsonValue() const
 	return Value; 
 }
 
-FString FJsonRpcId::ToString() const
+FString FUMCP_JsonRpcId::ToString() const
 {
 	if (!Value.IsValid()) return TEXT("[null]");
 	switch (Value->Type)
@@ -43,7 +43,7 @@ FString FJsonRpcId::ToString() const
 			return TEXT("[invalid_id_type]"); 
 	}
 }
-bool FJsonRpcRequest::ToJsonString(FString& OutJsonString) const
+bool FUMCP_JsonRpcRequest::ToJsonString(FString& OutJsonString) const
 {
 	TSharedPtr<FJsonObject> JsonObject = MakeShared<FJsonObject>();
 	JsonObject->SetStringField(TEXT("jsonrpc"), jsonrpc);
@@ -64,7 +64,7 @@ bool FJsonRpcRequest::ToJsonString(FString& OutJsonString) const
 	return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
 }
 
-bool FJsonRpcRequest::CreateFromJsonString(const FString& JsonString, FJsonRpcRequest& OutRequest)
+bool FUMCP_JsonRpcRequest::CreateFromJsonString(const FString& JsonString, FUMCP_JsonRpcRequest& OutRequest)
 {
 	TSharedPtr<FJsonObject> RootJsonObject;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
@@ -87,11 +87,11 @@ bool FJsonRpcRequest::CreateFromJsonString(const FString& JsonString, FJsonRpcRe
 	// and CreateFromJsonValue correctly creates an 'absent' FJsonRpcId.
 	if (RootJsonObject->HasField(TEXT("id")))
 	{
-		OutRequest.id = FJsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
+		OutRequest.id = FUMCP_JsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
 	}
 	else
 	{
-		OutRequest.id = FJsonRpcId::CreateNullId();
+		OutRequest.id = FUMCP_JsonRpcId::CreateNullId();
 	}
 	
 	if (RootJsonObject->HasTypedField<EJson::Object>(TEXT("params")))
@@ -108,7 +108,7 @@ bool FJsonRpcRequest::CreateFromJsonString(const FString& JsonString, FJsonRpcRe
 
 	return true;
 }
-bool FJsonRpcErrorObject::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_JsonRpcError::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	// FJsonObjectConverter::UStructToJsonObject will only serialize UPROPERTY members.
 	// We need to construct it manually or use a hybrid approach if we want to keep UPROPERTY for code/message.
@@ -121,7 +121,7 @@ bool FJsonRpcErrorObject::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) c
 	return true; // Assume success for manual construction
 }
 
-bool FJsonRpcErrorObject::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FJsonRpcErrorObject& OutErrorObject)
+bool FUMCP_JsonRpcError::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_JsonRpcError& OutErrorObject)
 {
 	if (!JsonObject.IsValid()) return false;
 
@@ -136,7 +136,7 @@ bool FJsonRpcErrorObject::CreateFromJsonObject(const TSharedPtr<FJsonObject>& Js
 	return true;
 }
 
-bool FJsonRpcResponse::ToJsonString(FString& OutJsonString) const
+bool FUMCP_JsonRpcResponse::ToJsonString(FString& OutJsonString) const
 {
 	TSharedPtr<FJsonObject> JsonObject = MakeShared<FJsonObject>();
 	JsonObject->SetStringField(TEXT("jsonrpc"), jsonrpc);
@@ -161,7 +161,7 @@ bool FJsonRpcResponse::ToJsonString(FString& OutJsonString) const
 		{
 			// Fallback if error content serialization fails (should be rare)
 			TSharedPtr<FJsonObject> FallbackError = MakeShared<FJsonObject>();
-			FallbackError->SetNumberField(TEXT("code"), static_cast<int32>(EMCPErrorCode::InternalError));
+			FallbackError->SetNumberField(TEXT("code"), static_cast<int32>(EUMCP_JsonRpcErrorCode::InternalError));
 			FallbackError->SetStringField(TEXT("message"), TEXT("Internal server error during error serialization."));
 			JsonObject->SetObjectField(TEXT("error"), FallbackError);
 		}
@@ -179,7 +179,7 @@ bool FJsonRpcResponse::ToJsonString(FString& OutJsonString) const
 	return FJsonSerializer::Serialize(JsonObject.ToSharedRef(), TJsonWriterFactory<>::Create(&OutJsonString));
 }
 
-bool FJsonRpcResponse::CreateFromJsonString(const FString& JsonString, FJsonRpcResponse& OutResponse)
+bool FUMCP_JsonRpcResponse::CreateFromJsonString(const FString& JsonString, FUMCP_JsonRpcResponse& OutResponse)
 {
 	TSharedPtr<FJsonObject> RootJsonObject;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonString);
@@ -200,18 +200,18 @@ bool FJsonRpcResponse::CreateFromJsonString(const FString& JsonString, FJsonRpcR
 	// and CreateFromJsonValue correctly creates an 'absent' FJsonRpcId.
 	if (RootJsonObject->HasField(TEXT("id")))
 	{
-		OutResponse.id = FJsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
+		OutResponse.id = FUMCP_JsonRpcId::CreateFromJsonValue(RootJsonObject->GetField<EJson::None>(TEXT("id")));
 	}
 	else
 	{
-		OutResponse.id = FJsonRpcId::CreateNullId();
+		OutResponse.id = FUMCP_JsonRpcId::CreateNullId();
 	}
 
 	if (RootJsonObject->HasTypedField<EJson::Object>(TEXT("error")))
 	{
 		TSharedPtr<FJsonObject> ErrorJsonObject = RootJsonObject->GetObjectField(TEXT("error"));
-		OutResponse.error = MakeShared<FJsonRpcErrorObject>();
-		if (!FJsonRpcErrorObject::CreateFromJsonObject(ErrorJsonObject, *OutResponse.error))
+		OutResponse.error = MakeShared<FUMCP_JsonRpcError>();
+		if (!FUMCP_JsonRpcError::CreateFromJsonObject(ErrorJsonObject, *OutResponse.error))
 		{
 			// Failed to parse the error object content
 			OutResponse.error = nullptr; // Or handle error parsing failure
@@ -227,78 +227,78 @@ bool FJsonRpcResponse::CreateFromJsonString(const FString& JsonString, FJsonRpcR
 	return true;
 }
 
-bool FServerInformation::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_ServerInfo::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FServerInformation::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FServerInformation& OutStruct)
+bool FUMCP_ServerInfo::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerInfo& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FToolServerCapabilities::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_ServerCapabilitiesTools::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FToolServerCapabilities::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FToolServerCapabilities& OutStruct)
+bool FUMCP_ServerCapabilitiesTools::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesTools& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FResourceServerCapabilities::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_ServerCapabilitiesResources::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FResourceServerCapabilities::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FResourceServerCapabilities& OutStruct)
+bool FUMCP_ServerCapabilitiesResources::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesResources& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FPromptServerCapabilities::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_ServerCapabilitiesPrompts::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FPromptServerCapabilities::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FPromptServerCapabilities& OutStruct)
+bool FUMCP_ServerCapabilitiesPrompts::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilitiesPrompts& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FServerCapabilities::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_ServerCapabilities::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FServerCapabilities::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FServerCapabilities& OutStruct)
+bool FUMCP_ServerCapabilities::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_ServerCapabilities& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FInitializeParams::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_InitializeParams::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FInitializeParams::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FInitializeParams& OutStruct)
+bool FUMCP_InitializeParams::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeParams& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
 }
 
-bool FInitializeResult::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
+bool FUMCP_InitializeResult::ToJsonObject(TSharedPtr<FJsonObject>& OutJsonObject) const
 {
 	return FJsonObjectConverter::UStructToJsonObject(this->StaticStruct(), this, OutJsonObject.ToSharedRef());
 }
 
-bool FInitializeResult::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FInitializeResult& OutStruct)
+bool FUMCP_InitializeResult::CreateFromJsonObject(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_InitializeResult& OutStruct)
 {
 	if (!JsonObject.IsValid()) return false;
 	return FJsonObjectConverter::JsonObjectToUStruct(JsonObject.ToSharedRef(), &OutStruct, 0, 0);
