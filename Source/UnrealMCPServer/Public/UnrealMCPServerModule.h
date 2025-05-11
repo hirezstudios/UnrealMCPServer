@@ -15,4 +15,5 @@ public:
 private:
 	TUniquePtr<class FUMCP_Server> Server;
 	TUniquePtr<class FUMCP_CommonTools> CommonTools;
+	TUniquePtr<class FUMCP_CommonResources> CommonResources;
 };

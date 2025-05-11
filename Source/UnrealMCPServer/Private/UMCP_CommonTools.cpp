@@ -5,7 +5,7 @@
 #include "Exporters/Exporter.h"
 
 
-void FUMCP_CommonTools::RegisterTools(class FUMCP_Server* Server)
+void FUMCP_CommonTools::Register(class FUMCP_Server* Server)
 {
 	{
 		FUMCP_ToolDefinition Tool;

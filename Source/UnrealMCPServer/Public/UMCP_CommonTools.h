@@ -5,7 +5,7 @@
 class FUMCP_CommonTools
 {
 public:
-	void RegisterTools(class FUMCP_Server* Server);
+	void Register(class FUMCP_Server* Server);
 
 private:
 	bool ExportBlueprintToT3D(TSharedPtr<FJsonObject> arguments, TArray<FUMCP_CallToolResultContent>& OutContent);

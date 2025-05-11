@@ -12,6 +12,7 @@ enum class EUMCP_JsonRpcErrorCode : int32
 {
     // Standard JSON-RPC 2.0 Error Codes
     ParseError = -32700,
+	ResourceNotFound = -32002,
     InvalidRequest = -32600,
     MethodNotFound = -32601,
     InvalidParams = -32602,
@@ -295,7 +296,7 @@ struct FUMCP_ListToolsParams
 	GENERATED_BODY()
 
 	UPROPERTY()
-	FString Cursor;
+	FString cursor;
 };
 
 UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
@@ -330,4 +331,128 @@ struct FUMCP_ListToolsResult
 
 	UPROPERTY()
 	TArray<FUMCP_ToolDefinition> tools;
+};
+
+USTRUCT()
+struct FUMCP_ReadResourceParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString uri;
+};
+
+USTRUCT()
+struct FUMCP_ReadResourceResultContent
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString uri;
+	
+	UPROPERTY()
+	FString text; // Used by text resources
+	
+	UPROPERTY()
+	FString blob; // Used by blob resources
+	
+	UPROPERTY()
+	FString mimeType;
+};
+
+USTRUCT()
+struct FUMCP_ReadResourceResult
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	TArray<FUMCP_ReadResourceResultContent> contents;
+};
+
+USTRUCT()
+struct FUMCP_ListResourcesParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString cursor;
+};
+
+UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ResourceRead, const FString& /* Uri */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
+
+USTRUCT()
+struct UNREALMCPSERVER_API FUMCP_ResourceDefinition
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString name;
+
+	UPROPERTY()
+	FString description;
+
+	UPROPERTY()
+	FString mimeType;
+
+	UPROPERTY()
+	FString uri;
+
+	// Part of the spec, but we don't need it for templated resources
+	UPROPERTY()
+	int32 size;
+
+	FUMCP_ResourceRead ReadResource;
+};
+
+USTRUCT()
+struct UNREALMCPSERVER_API FUMCP_ListResourcesResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString nextCursor;
+
+	UPROPERTY()
+	TArray<FUMCP_ResourceDefinition> resources;
+};
+
+USTRUCT()
+struct FUMCP_ListResourceTemplatesParams
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString cursor;
+};
+
+USTRUCT()
+struct FUMCP_ResourceTemplateDefinition
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString name;
+
+	UPROPERTY()
+	FString description;
+
+	UPROPERTY()
+	FString mimeType;
+
+	UPROPERTY()
+	FString uriTemplate;
+	
+	FUMCP_ResourceRead ReadResource;
+};
+
+USTRUCT()
+struct FUMCP_ListResourceTemplatesResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString nextCursor;
+
+	UPROPERTY()
+	TArray<FUMCP_ResourceTemplateDefinition> resourceTemplates;
 };

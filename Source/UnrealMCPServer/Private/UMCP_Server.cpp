@@ -7,6 +7,7 @@
 #include "HttpServerResponse.h"
 #include "JsonUtilities.h"
 #include "Json.h"
+#include "../../../../../../../Engine/Build/IOS/Resources/FrameworkWrapper/FrameworkWrapper/Views/UnrealView.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Engine/Engine.h" // For FEngineVersion
@@ -69,6 +70,22 @@ bool FUMCP_Server::RegisterTool(FUMCP_ToolDefinition Tool)
 		return false;
 	}
 	Tools.Add(Tool.name, Tool);
+	return true;
+}
+
+bool FUMCP_Server::RegisterResource(FUMCP_ResourceDefinition Resource)
+{
+	if (Resources.Contains(Resource.uri))
+	{
+		return false;
+	}
+	Resources.Add(Resource.uri, Resource);
+	return true;
+}
+
+bool FUMCP_Server::RegisterResourceTemplate(FUMCP_ResourceTemplateDefinition ResourceTemplate)
+{
+	ResourceTemplates.Add(ResourceTemplate);
 	return true;
 }
 
@@ -154,6 +171,7 @@ void FUMCP_Server::HandleStreamableHTTPMCPRequest(const FHttpServerRequest& Requ
 
 void FUMCP_Server::RegisterInternalRpcMethodHandlers()
 {
+	// General 
 	RegisterRpcMethodHandler(TEXT("initialize"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 	{
 		return Rpc_Initialize(Request, OutSuccess, OutError);
@@ -166,6 +184,8 @@ void FUMCP_Server::RegisterInternalRpcMethodHandlers()
 	{
 		return Rpc_ClientNotifyInitialized(Request, OutSuccess, OutError);
 	});
+
+	// Tools
 	RegisterRpcMethodHandler(TEXT("tools/list"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 	{
 		return Rpc_ToolsList(Request, OutSuccess, OutError);
@@ -173,6 +193,20 @@ void FUMCP_Server::RegisterInternalRpcMethodHandlers()
 	RegisterRpcMethodHandler(TEXT("tools/call"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
 	{
 		return Rpc_ToolsCall(Request, OutSuccess, OutError);
+	});
+
+	// Resources
+	RegisterRpcMethodHandler(TEXT("resources/list"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+	{
+		return Rpc_ResourcesList(Request, OutSuccess, OutError);
+	});
+	RegisterRpcMethodHandler(TEXT("resources/templates/list"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+	{
+		return Rpc_ResourcesTemplatesList(Request, OutSuccess, OutError);
+	});
+	RegisterRpcMethodHandler(TEXT("resources/read"), [this](const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+	{
+		return Rpc_ResourcesRead(Request, OutSuccess, OutError);
 	});
 }
 
@@ -273,4 +307,117 @@ bool FUMCP_Server::Rpc_ToolsCall(const FUMCP_JsonRpcRequest& Request, TSharedPtr
 		return false;
 	}
 	return true;
+}
+
+bool FUMCP_Server::Rpc_ResourcesList(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+{
+	FUMCP_ListResourcesParams Params;
+	if (!UMCP_CreateFromJsonObject(Request.params, Params, true))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
+		OutError.message = TEXT("Failed to parse list resources params");
+        return false;
+	}
+
+	FUMCP_ListResourcesResult Result;
+	for (auto Itr = Resources.CreateConstIterator(); Itr; ++Itr)
+	{
+		Result.resources.Add(Itr->Value);
+	}
+	
+	if (!UMCP_ToJsonObject(Result, OutSuccess))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+		OutError.message = TEXT("Failed to serialize result");
+		return false;
+	}
+	return true;
+}
+
+bool FUMCP_Server::Rpc_ResourcesTemplatesList(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+{
+	FUMCP_ListResourceTemplatesParams Params;
+	if (!UMCP_CreateFromJsonObject(Request.params, Params, true))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
+		OutError.message = TEXT("Failed to parse list resources params");
+        return false;
+	}
+
+	FUMCP_ListResourceTemplatesResult Result;
+	Result.resourceTemplates = ResourceTemplates;
+	if (!UMCP_ToJsonObject(Result, OutSuccess))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+		OutError.message = TEXT("Failed to serialize result");
+		return false;
+	}
+	return true;
+}
+
+bool FUMCP_Server::Rpc_ResourcesRead(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError)
+{
+	FUMCP_ReadResourceParams Params;
+	if (!UMCP_CreateFromJsonObject(Request.params, Params))
+	{
+		OutError.SetError(EUMCP_JsonRpcErrorCode::InvalidParams);
+		OutError.message = TEXT("Failed to parse read resource params");
+        return false;
+	}
+
+	FUMCP_ReadResourceResult Result;
+
+	// First check our static resources (since the check is easier)
+	auto* Resource = Resources.Find(Params.uri);
+	if (Resource && Resource->ReadResource.IsBound())
+	{
+		if (!Resource->ReadResource.Execute(Params.uri, Result.contents))
+		{
+			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+			OutError.message = TEXT("Failed to load resource contents");
+			return false;
+		}
+		
+		if (!UMCP_ToJsonObject(Result, OutSuccess))
+		{
+			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+			OutError.message = TEXT("Failed to serialize result");
+			return false;
+		}
+		return true;
+	}
+
+	// Check resouce templates
+	for (auto Itr = ResourceTemplates.CreateConstIterator(); Itr; ++Itr)
+	{
+		if (!Itr->ReadResource.IsBound() || !UriMatchesUriTemplate(Params.uri, Itr->uriTemplate))
+		{
+			continue;
+		}
+
+		if (!Itr->ReadResource.Execute(Params.uri, Result.contents))
+		{
+			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+			OutError.message = TEXT("Failed to load resource contents");
+			return false;
+		}
+		
+		if (!UMCP_ToJsonObject(Result, OutSuccess))
+		{
+			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+			OutError.message = TEXT("Failed to serialize result");
+			return false;
+		}
+		return true;
+	}
+	
+	OutError.SetError(EUMCP_JsonRpcErrorCode::ResourceNotFound);
+	OutError.message = TEXT("Resource not found");
+	return false;
+}
+
+bool FUMCP_Server::UriMatchesUriTemplate(const FString& Uri, const FString& UriTemplate) const
+{
+	//TODO implement a proper URI template comparator
+	return false;
 }
