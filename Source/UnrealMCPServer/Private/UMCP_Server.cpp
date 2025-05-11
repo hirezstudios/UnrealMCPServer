@@ -7,10 +7,9 @@
 #include "HttpServerResponse.h"
 #include "JsonUtilities.h"
 #include "Json.h"
-#include "../../../../../../../Engine/Build/IOS/Resources/FrameworkWrapper/FrameworkWrapper/Views/UnrealView.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
-#include "Engine/Engine.h" // For FEngineVersion
+#include "Engine/Engine.h"
 
 const FString FUMCP_Server::MCP_PROTOCOL_VERSION = TEXT("2024-11-05");//TEXT("2025-03-26");
 const FString FUMCP_Server::PLUGIN_VERSION = TEXT("0.1.0");
