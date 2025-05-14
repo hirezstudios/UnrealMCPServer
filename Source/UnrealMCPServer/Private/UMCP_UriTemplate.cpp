@@ -1,4 +1,4 @@
-﻿#include "UMCP_UriTemplate.h"
+#include "UMCP_UriTemplate.h"
 
 #include "FindInBlueprintManager.h"
 
@@ -181,91 +181,166 @@ void FUMCP_UriTemplate::TryParseTemplate()
 
 bool FUMCP_UriTemplate::FindMatch(const FString& Uri, FUMCP_UriTemplateMatch& OutMatch) const
 {
-	FStringView UriRemaining = Uri;
-	for (auto Itr = Components.CreateConstIterator(); Itr; ++Itr)
-	{
-		if (UriRemaining.IsEmpty())
-		{
-			return false;
-		}
-		
-		if (Itr->Type == EUMCP_UriTemplateComponentType::Literal)
-		{
-			if (!UriRemaining.StartsWith(Itr->Literal, ESearchCase::CaseSensitive))
-			{
-				return false;
-			}
-			UriRemaining = UriRemaining.RightChop(Itr->Literal.Len());
-			continue;
-		}
+    OutMatch.Uri = Uri; // Store the original URI in the match result
+    FStringView UriRemaining = Uri;
 
-		if (Itr->Type != EUMCP_UriTemplateComponentType::VarList)
-		{
-			return false; // something horribly wrong has happened
-		}
+    for (auto Itr = Components.CreateConstIterator(); Itr; ++Itr)
+    {
+        if (Itr->Type == EUMCP_UriTemplateComponentType::Literal)
+        {
+            if (UriRemaining.IsEmpty() && !Itr->Literal.IsEmpty()) // More URI needed for literal
+            {
+                return false;
+            }
+            if (!UriRemaining.StartsWith(Itr->Literal, ESearchCase::CaseSensitive))
+            {
+                return false;
+            }
+            UriRemaining.RightChopInline(Itr->Literal.Len());
+            continue;
+        }
 
-		const auto RequiredPrefix = Itr->GetPrefixChar();
-		if (RequiredPrefix != 0 && UriRemaining[0] != RequiredPrefix)
-		{
-			return false;
-		}
+        if (UriRemaining.IsEmpty() && Itr->Type == EUMCP_UriTemplateComponentType::VarList)
+        {
+            if (Itr->VarSpecs.Num() > 0) { 
+                 bool bCanBeEmpty = (Itr->ExpressionOperator == TEXT('?') || Itr->ExpressionOperator == TEXT('&'));
+                 if (!bCanBeEmpty && (Itr+1)) 
+                 {
+                    return false;
+                 }
+            } else { 
+                return false;
+            }
+        }
 
-		FStringView ExpressionToMatch = UriRemaining;
-		auto Current = Itr;
-		if (auto Next = Itr + 1)
-		{
-			switch (Next->Type)
-			{
-			case EUMCP_UriTemplateComponentType::Literal:
-				{
-					auto End = UriRemaining.Find(Next->Literal);
-					if (End == INDEX_NONE)
-					{
-						return false;
-					}
-					UriRemaining = UriRemaining.RightChop(End + Next->Literal.Len());
-					ExpressionToMatch = ExpressionToMatch.LeftChop(End);
-					Itr++; // We have successfully parsed the *next* component, so iterate ahead - the loop will do the next one
-				}
-				break;
-			case EUMCP_UriTemplateComponentType::VarList:
-				auto PrefixChar = Next->GetPrefixChar();
-				if (PrefixChar == 0)
-				{
-					return false; // I'm not sure we could properly parse this at all
-				}
-				
-				int32 NextStartPos;
-				if (!UriRemaining.FindChar(PrefixChar, NextStartPos))
-				{
-					return false;
-				}
-				UriRemaining = UriRemaining.RightChop(NextStartPos);
-				ExpressionToMatch = ExpressionToMatch.LeftChop(NextStartPos);
-				break;
-			}
-		}
 
-		const auto Separator = Current->GetSeparatorChar();
-		TArray<FString> Vars;
-		while (!ExpressionToMatch.IsEmpty())
-		{
-			int32 ExpressionEnd;
-			if (ExpressionToMatch.FindChar(Separator, ExpressionEnd))
-			{
-				Vars.Add(FString(ExpressionToMatch.LeftChop(ExpressionEnd)));
-			}
-			else
-			{
-				Vars.Add(FString(ExpressionToMatch));
-			}
-		}
+        if (Itr->Type != EUMCP_UriTemplateComponentType::VarList)
+        {
+            return false; 
+        }
 
-		// TODO parse out vars based on the Expression Operator
+        const auto& CurrentComponent = *Itr;
+        FStringView ExpressionToMatchThisComponent = UriRemaining;
+        const auto RequiredPrefix = CurrentComponent.GetPrefixChar();
 
-	}
-	
-	return true;
+        if (RequiredPrefix != 0)
+        {
+            if (ExpressionToMatchThisComponent.IsEmpty() || ExpressionToMatchThisComponent[0] != RequiredPrefix)
+            {
+                if (CurrentComponent.ExpressionOperator == TEXT('?') || CurrentComponent.ExpressionOperator == TEXT('&'))
+                {
+                    continue;
+                }
+                return false; 
+            }
+            ExpressionToMatchThisComponent.RightChopInline(1); 
+        }
+
+        FStringView NextComponentBoundaryMarker;
+        bool bNextComponentIsLiteral = false;
+        bool bFoundNextComponentBoundary = false;
+        int32 CurrentMatchEndPosition = ExpressionToMatchThisComponent.Len();
+
+        auto NextTemplateComponentItr = Itr + 1;
+        if (NextTemplateComponentItr) 
+        {
+            if (NextTemplateComponentItr->Type == EUMCP_UriTemplateComponentType::Literal)
+            {
+                int32 BoundaryIdx = ExpressionToMatchThisComponent.Find(NextTemplateComponentItr->Literal);
+                if (BoundaryIdx != INDEX_NONE)
+                {
+                    CurrentMatchEndPosition = BoundaryIdx;
+                    NextComponentBoundaryMarker = NextTemplateComponentItr->Literal;
+                    bNextComponentIsLiteral = true;
+                    bFoundNextComponentBoundary = true;
+                }
+                else if (!NextTemplateComponentItr->Literal.IsEmpty()) 
+                {
+                    return false; 
+                }
+            }
+            else if (NextTemplateComponentItr->Type == EUMCP_UriTemplateComponentType::VarList)
+            {
+                auto NextExpressionPrefixChar = NextTemplateComponentItr->GetPrefixChar();
+                if (NextExpressionPrefixChar != 0)
+                {
+                    int32 NextExpressionStartPosInCurrentMatch;
+                    if (ExpressionToMatchThisComponent.FindChar(NextExpressionPrefixChar, NextExpressionStartPosInCurrentMatch))
+                    {
+                        CurrentMatchEndPosition = NextExpressionStartPosInCurrentMatch;
+                        NextComponentBoundaryMarker = ExpressionToMatchThisComponent.Mid(NextExpressionStartPosInCurrentMatch, 1);
+                        bFoundNextComponentBoundary = true;
+                    }
+                }
+            }
+        }
+        
+        ExpressionToMatchThisComponent = ExpressionToMatchThisComponent.Left(CurrentMatchEndPosition);
+
+        if (CurrentComponent.VarSpecs.Num() == 1)
+        {
+            const auto& VarSpec = CurrentComponent.VarSpecs[0];
+            if (VarSpec.Type == EUMCP_UriTemplateComponentVarSpecType::Normal && VarSpec.MaxLength == 0)
+            {
+                if (!ExpressionToMatchThisComponent.IsEmpty())
+                {
+                    OutMatch.Variables.FindOrAdd(VarSpec.Val).Add(FString(ExpressionToMatchThisComponent));
+                }
+                else 
+                {
+                    OutMatch.Variables.FindOrAdd(VarSpec.Val).Add(FString());
+                }
+                
+                UriRemaining.RightChopInline(CurrentMatchEndPosition); 
+                
+                if (bFoundNextComponentBoundary)
+                {
+                    if (bNextComponentIsLiteral) {
+                         if (UriRemaining.StartsWith(NextComponentBoundaryMarker)) {
+                            UriRemaining.RightChopInline(NextComponentBoundaryMarker.Len());
+                        } else {
+                            return false;
+                        }
+                    }
+                    Itr++; 
+                }
+                continue; 
+            }
+        }
+
+        if (CurrentComponent.VarSpecs.Num() > 0) {
+            if (CurrentComponent.ExpressionOperator == 0 || CurrentComponent.ExpressionOperator == TEXT('/') || CurrentComponent.ExpressionOperator == TEXT('.')) {
+                if (CurrentComponent.VarSpecs.Num() == 1 && !ExpressionToMatchThisComponent.IsEmpty()) {
+                     OutMatch.Variables.FindOrAdd(CurrentComponent.VarSpecs[0].Val).Add(FString(ExpressionToMatchThisComponent));
+                } else if (CurrentComponent.VarSpecs.Num() > 0) {
+                     return false;
+                }
+            } else {
+                return false; 
+            }
+        }
+
+        UriRemaining.RightChopInline(CurrentMatchEndPosition); 
+
+        if (bFoundNextComponentBoundary)
+        {
+            if (bNextComponentIsLiteral) {
+                if (UriRemaining.StartsWith(NextComponentBoundaryMarker)) {
+                    UriRemaining.RightChopInline(NextComponentBoundaryMarker.Len());
+                } else {
+                    return false; 
+                }
+            }
+            Itr++; 
+        }
+    } 
+
+    if (!UriRemaining.IsEmpty())
+    {
+        return false;
+    }
+
+    return true;
 }
 
 FString FUMCP_UriTemplate::Expand(const TMap<FString, TArray<FString>>& Values) const
