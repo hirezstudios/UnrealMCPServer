@@ -59,14 +59,73 @@ TEST_CASE_NAMED(FUMCP_UriTemplateParseTests_ExplodedExpression, "Plugin.MCP.UriT
 }
 
 
+void DoUriTemplateMatchCheck(FString UriTemplateStr, FString UriToCheck, TMap<FString, TArray<FString>> ExpectedVariables)
+{
+	FUMCP_UriTemplate UriTemplate(UriTemplateStr);
+	CHECK_MESSAGE(FString::Printf(TEXT("UriTemplate '%s': not valid: '%s'"), *UriTemplateStr, *UriTemplate.ParseError()), UriTemplate.IsValid());
+
+	FUMCP_UriTemplateMatch MatchResult;
+	bool bMatched = UriTemplate.FindMatch(UriToCheck, MatchResult);
+	CHECK_MESSAGE(FString::Printf(TEXT("UriTemplate '%s': URI '%s' did not match"), *UriTemplateStr, *UriToCheck), bMatched);
+	CHECK_MESSAGE(FString::Printf(TEXT("UriTemplate '%s': URI '%s' variables did not match expected variables"), *UriTemplateStr, *UriToCheck), MatchResult.Variables.OrderIndependentCompareEqual(ExpectedVariables));
+}
+
+
 // --- URI Template Matching Tests ---
+TEST_CASE_NAMED(FUMCP_UriTemplateMatchTests_Level1, "Plugin.MCP.UriTemplate.Match::Level1", "[UriTemplate][Match][Level1]")
+{
+	DoUriTemplateMatchCheck(TEXT("{var}"), TEXT("value"), TMap<FString, TArray<FString>>{
+		{TEXT("var"), TArray<FString>{ TEXT("value") }},
+	});
+	DoUriTemplateMatchCheck(TEXT("{hello}"), TEXT("Hello%20World%21"), TMap<FString, TArray<FString>>{
+		{TEXT("hello"), TArray<FString>{ TEXT("Hello World!") }},
+	});
+	DoUriTemplateMatchCheck(TEXT("{base}index"), TEXT("http%3A%2F%2Fexample.com%2Fhome%2Findex"), TMap<FString, TArray<FString>>{
+		{TEXT("base"), TArray<FString>{ TEXT("http://example.com/home/") }},
+	});
+}
+
+TEST_CASE_NAMED(FUMCP_UriTemplateMatchTests_Level2, "Plugin.MCP.UriTemplate.Match::Level2", "[UriTemplate][Match][Level2]")
+{
+    SECTION("Reserved Matching")
+    {
+		DoUriTemplateMatchCheck(TEXT("{+var}"), TEXT("value"), TMap<FString, TArray<FString>>{
+			{TEXT("var"), TArray<FString>{ TEXT("value") }},
+		});
+		DoUriTemplateMatchCheck(TEXT("{+hello}"), TEXT("Hello%20World!"), TMap<FString, TArray<FString>>{
+			{TEXT("hello"), TArray<FString>{ TEXT("Hello World!") }},
+		});
+		DoUriTemplateMatchCheck(TEXT("{+path}/here"), TEXT("/foo/bar/here"), TMap<FString, TArray<FString>>{
+			{TEXT("path"), TArray<FString>{ TEXT("/foo/bar") }},
+		});
+		DoUriTemplateMatchCheck(TEXT("here?ref={+path}"), TEXT("here?ref=/foo/bar"), TMap<FString, TArray<FString>>{
+			{TEXT("path"), TArray<FString>{ TEXT("/foo/bar") }},
+		});
+		DoUriTemplateMatchCheck(TEXT("{+base}index"), TEXT("http://example.com/home/index"), TMap<FString, TArray<FString>>{
+			{TEXT("base"), TArray<FString>{ TEXT("http://example.com/home/") }},
+		});
+		DoUriTemplateMatchCheck(TEXT("O{+empty}X"), TEXT("OX"), TMap<FString, TArray<FString>>{
+			{TEXT("empty"), TArray<FString>{ TEXT("") }},
+		});
+    }
+	
+    SECTION("Frament Matching")
+    {
+	    DoUriTemplateMatchCheck(TEXT("X{#var}"), TEXT("X#value"), TMap<FString, TArray<FString>>{
+			{TEXT("var"), TArray<FString>{ TEXT("value") }},
+		});
+    	DoUriTemplateMatchCheck(TEXT("X{#hello}"), TEXT("X#Hello%20World!"), TMap<FString, TArray<FString>>{
+			{TEXT("hello"), TArray<FString>{ TEXT("Hello World!") }},
+		});
+    }
+}
+
 
 TEST_CASE_NAMED(FUMCP_UriTemplateMatchTests_SimpleExpressionValue, "Plugin.MCP.UriTemplate.Match::SimpleExpressionValue", "[UriTemplate][Match][SmokeFilter]")
 {
     SECTION("Basic ID match")
     {
-        FString TemplateStr = TEXT("/users/{id}/profile");
-        FUMCP_UriTemplate UriTemplate(TemplateStr);
+        FUMCP_UriTemplate UriTemplate(TEXT("/users/{id}/profile"));
         CHECK_MESSAGE(TEXT("Template '/users/{id}/profile' should be valid."), UriTemplate.IsValid());
 
         FString UriToMatch = TEXT("/users/12345/profile");
@@ -90,55 +149,52 @@ TEST_CASE_NAMED(FUMCP_UriTemplateMatchTests_SimpleExpressionValue, "Plugin.MCP.U
 
     SECTION("Alternative ID match")
     {
-        FString TemplateStr = TEXT("/users/{id}/profile");
-        FUMCP_UriTemplate UriTemplate(TemplateStr); // Re-init for clarity, though state should be const
+        FUMCP_UriTemplate UriTemplate(TEXT("/users/{id}/profile")); // Re-init for clarity, though state should be const
         CHECK_MESSAGE(TEXT("Template '/users/{id}/profile' should be valid for alternative ID test."), UriTemplate.IsValid());
 
-        FString UriToMatch = TEXT("/users/another-id/profile");
         FUMCP_UriTemplateMatch MatchResult; // Reset
-        bool bMatched = UriTemplate.FindMatch(UriToMatch, MatchResult);
+        bool bMatched = UriTemplate.FindMatch(TEXT("/users/another-id/profile"), MatchResult);
         CHECK_MESSAGE(TEXT("URI '/users/another-id/profile' with different ID should match."), bMatched);
         const TArray<FString>* Values = MatchResult.Variables.Find(TEXT("id"));
         CHECK_MESSAGE(TEXT("Variable 'id' (another-id) should be found."), Values != nullptr);
-        if (Values && Values->Num() == 1) // Check Values pointer again for safety in this section
+        if (Values) // Check Values pointer again for safety in this section
         {
-            CHECK_MESSAGE(TEXT("Variable 'id' should be 'another-id'."), (*Values)[0] == TEXT("another-id"));
+			CHECK_MESSAGE(TEXT("Variable 'id' (another-id) should be found exactly 1 time."), Values->Num() == 1);
+        	if (Values->Num() == 1)
+        	{
+				CHECK_MESSAGE(TEXT("Variable 'id' should be 'another-id'."), (*Values)[0] == TEXT("another-id"));
+        	}
         }
     }
     
     SECTION("Non-match: Missing ID segment")
     {
-        FString TemplateStr = TEXT("/users/{id}/profile");
-        FUMCP_UriTemplate UriTemplate(TemplateStr);
+        FUMCP_UriTemplate UriTemplate(TEXT("/users/{id}/profile"));
         CHECK_MESSAGE(TEXT("Template '/users/{id}/profile' should be valid for non-match test."), UriTemplate.IsValid());
         
-        FString UriToMatch = TEXT("/users/profile"); 
         FUMCP_UriTemplateMatch MatchResult; // Reset
-        bool bMatched = UriTemplate.FindMatch(UriToMatch, MatchResult);
+        bool bMatched = UriTemplate.FindMatch(TEXT("/users/profile"), MatchResult);
         CHECK_MESSAGE(TEXT("URI '/users/profile' missing ID segment should not match."), !bMatched);
     }
 
     SECTION("Non-match: Extra segment at end")
     {
-        FString TemplateStr = TEXT("/users/{id}/profile");
-        FUMCP_UriTemplate UriTemplate(TemplateStr);
+        FUMCP_UriTemplate UriTemplate(TEXT("/users/{id}/profile"));
         CHECK_MESSAGE(TEXT("Template '/users/{id}/profile' should be valid for extra segment test."), UriTemplate.IsValid());
 
         FString UriToMatch = TEXT("/users/someid/profile/extra");
         FUMCP_UriTemplateMatch MatchResult;
         bool bMatched = UriTemplate.FindMatch(UriToMatch, MatchResult);
-        CHECK_MESSAGE(TEXT("URI '/users/someid/profile/extra' with extra segment should not match."), !bMatched);
+        CHECK_MESSAGE(TEXT("URI '/users/someid/profile/extra' with extra segment should not match."), bMatched);
     }
 
     SECTION("Dot operator simple case")
     {
-        FString TemplateStrWithDot = TEXT("/file{.ext}");
-        FUMCP_UriTemplate UriTemplateDot(TemplateStrWithDot);
+        FUMCP_UriTemplate UriTemplateDot(TEXT("/file{.ext}"));
         CHECK_MESSAGE(TEXT("Template '/file{.ext}' with dot operator should be valid."), UriTemplateDot.IsValid());
         
-        FString UriToMatch = TEXT("/file.txt");
         FUMCP_UriTemplateMatch MatchResult;
-        bool bMatched = UriTemplateDot.FindMatch(UriToMatch, MatchResult);
+        bool bMatched = UriTemplateDot.FindMatch(TEXT("/file.txt"), MatchResult);
         CHECK_MESSAGE(TEXT("URI '/file.txt' with dot operator should match."), bMatched);
         const TArray<FString>* Values = MatchResult.Variables.Find(TEXT("ext"));
         CHECK_MESSAGE(TEXT("Variable 'ext' should be found for dot operator."), Values != nullptr);

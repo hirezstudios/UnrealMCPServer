@@ -5,6 +5,7 @@
 #include "Templates/SharedPointer.h"
 #include "JsonUtilities.h" // For FJsonObjectConverter
 #include "Serialization/JsonSerializer.h" // For FJsonSerializer
+#include "UMCP_UriTemplate.h"
 #include "UMCP_Types.generated.h"
 
 // Standard JSON-RPC 2.0 Error Codes & MCP Specific Codes
@@ -425,6 +426,8 @@ struct FUMCP_ListResourceTemplatesParams
 	FString cursor;
 };
 
+UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_ThreeParams(bool, FUMCP_ResourceTemplateRead, const FUMCP_UriTemplate& /* Template */, const FUMCP_UriTemplateMatch& /* UriMatch */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
+
 USTRUCT()
 struct FUMCP_ResourceTemplateDefinition
 {
@@ -441,8 +444,8 @@ struct FUMCP_ResourceTemplateDefinition
 
 	UPROPERTY()
 	FString uriTemplate;
-	
-	FUMCP_ResourceRead ReadResource;
+
+	FUMCP_ResourceTemplateRead ReadResource;
 };
 
 USTRUCT()

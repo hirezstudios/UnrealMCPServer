@@ -37,7 +37,8 @@ public class UnrealMCPServer : ModuleRules
 				"SlateCore",
 				"HTTPServer", // For HTTP server functionalities
 				"Json", // For FJsonObject
-				"JsonUtilities" // For FJsonObjectConverter
+				"JsonUtilities", // For FJsonObjectConverter
+				"HTTP"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

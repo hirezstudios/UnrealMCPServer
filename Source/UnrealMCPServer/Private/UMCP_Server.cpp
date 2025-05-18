@@ -7,6 +7,7 @@
 #include "HttpServerResponse.h"
 #include "JsonUtilities.h"
 #include "Json.h"
+#include "UMCP_UriTemplate.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Engine/Engine.h"
@@ -64,6 +65,10 @@ void FUMCP_Server::RegisterRpcMethodHandler(const FString& MethodName, UMCP_Json
 
 bool FUMCP_Server::RegisterTool(FUMCP_ToolDefinition Tool)
 {
+	if (!Tool.DoToolCall.IsBound())
+	{
+		return false;
+	}
 	if (Tools.Contains(Tool.name))
 	{
 		return false;
@@ -74,6 +79,10 @@ bool FUMCP_Server::RegisterTool(FUMCP_ToolDefinition Tool)
 
 bool FUMCP_Server::RegisterResource(FUMCP_ResourceDefinition Resource)
 {
+	if (!Resource.ReadResource.IsBound())
+	{
+		return false;
+	}
 	if (Resources.Contains(Resource.uri))
 	{
 		return false;
@@ -84,7 +93,17 @@ bool FUMCP_Server::RegisterResource(FUMCP_ResourceDefinition Resource)
 
 bool FUMCP_Server::RegisterResourceTemplate(FUMCP_ResourceTemplateDefinition ResourceTemplate)
 {
-	ResourceTemplates.Add(ResourceTemplate);
+	if (!ResourceTemplate.ReadResource.IsBound())
+	{
+		return false;
+	}
+	FUMCP_UriTemplate UriTemplate{ResourceTemplate.uriTemplate};
+	if (!UriTemplate.IsValid())
+	{
+		return false;
+	}
+	
+	ResourceTemplates.Emplace(MoveTemp(UriTemplate), MoveTemp(ResourceTemplate));
 	return true;
 }
 
@@ -344,7 +363,10 @@ bool FUMCP_Server::Rpc_ResourcesTemplatesList(const FUMCP_JsonRpcRequest& Reques
 	}
 
 	FUMCP_ListResourceTemplatesResult Result;
-	Result.resourceTemplates = ResourceTemplates;
+	for (auto Itr = ResourceTemplates.CreateConstIterator(); Itr; Itr++)
+	{
+		Result.resourceTemplates.Emplace(Itr->Value);
+	}
 	if (!UMCP_ToJsonObject(Result, OutSuccess))
 	{
 		OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
@@ -372,7 +394,7 @@ bool FUMCP_Server::Rpc_ResourcesRead(const FUMCP_JsonRpcRequest& Request, TShare
 	{
 		if (!Resource->ReadResource.Execute(Params.uri, Result.contents))
 		{
-			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
+			OutError.SetError(EUMCP_JsonRpcErrorCode::ResourceNotFound);
 			OutError.message = TEXT("Failed to load resource contents");
 			return false;
 		}
@@ -389,12 +411,20 @@ bool FUMCP_Server::Rpc_ResourcesRead(const FUMCP_JsonRpcRequest& Request, TShare
 	// Check resouce templates
 	for (auto Itr = ResourceTemplates.CreateConstIterator(); Itr; ++Itr)
 	{
-		if (!Itr->ReadResource.IsBound() || !UriMatchesUriTemplate(Params.uri, Itr->uriTemplate))
+		auto& ResourceTemplate = Itr->Value;
+		if (!ResourceTemplate.ReadResource.IsBound())
+		{
+			continue;
+		}
+		
+		auto& UriTemplate = Itr->Key;
+		FUMCP_UriTemplateMatch Match;
+		if (!UriTemplate.FindMatch(Params.uri, Match))
 		{
 			continue;
 		}
 
-		if (!Itr->ReadResource.Execute(Params.uri, Result.contents))
+		if (!ResourceTemplate.ReadResource.Execute(UriTemplate, Match, Result.contents))
 		{
 			OutError.SetError(EUMCP_JsonRpcErrorCode::InternalError);
 			OutError.message = TEXT("Failed to load resource contents");

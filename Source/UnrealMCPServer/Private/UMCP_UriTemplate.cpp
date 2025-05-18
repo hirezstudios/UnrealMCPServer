@@ -1,6 +1,8 @@
 #include "UMCP_UriTemplate.h"
 
 #include "FindInBlueprintManager.h"
+#include "String/ParseTokens.h"
+#include "PlatformHttp.h"
 
 
 FString::ElementType FUMCP_UriTemplateComponent::GetPrefixChar() const
@@ -46,6 +48,19 @@ FString::ElementType FUMCP_UriTemplateComponent::GetSeparatorChar() const
 	case '+': // Level 2 - Reserved character strings
 	default:
 		return ',';
+	}
+}
+
+
+bool FUMCP_UriTemplateComponent::AllowsNamedVars() const
+{
+	switch (ExpressionOperator)
+	{
+	case '?': // Level 3 - Query component beginning with "?" and consisting of name=value pairs separated by "&"
+	case '&': // Level 3 - continuation of query-style &name=value pairs within a literal query component
+		return true;
+	default:
+		return false;
 	}
 }
 
@@ -168,6 +183,7 @@ void FUMCP_UriTemplate::TryParseTemplate()
 				}
 				Temp = FString();
 				bParsingVarlist = true;
+				continue;
 			}
 		}
 		Temp.AppendChar(c);
@@ -202,17 +218,17 @@ bool FUMCP_UriTemplate::FindMatch(const FString& Uri, FUMCP_UriTemplateMatch& Ou
 
         if (UriRemaining.IsEmpty() && Itr->Type == EUMCP_UriTemplateComponentType::VarList)
         {
-            if (Itr->VarSpecs.Num() > 0) { 
-                 bool bCanBeEmpty = (Itr->ExpressionOperator == TEXT('?') || Itr->ExpressionOperator == TEXT('&'));
-                 if (!bCanBeEmpty && (Itr+1)) 
-                 {
-                    return false;
-                 }
-            } else { 
-                return false;
-            }
-        }
+			if (Itr->VarSpecs.IsEmpty())
+			{
+				return false;
+			}
 
+			const bool bCanBeEmpty = (Itr->ExpressionOperator == TEXT('?') || Itr->ExpressionOperator == TEXT('&'));
+			if (!bCanBeEmpty && (Itr+1)) 
+			{
+				return false;
+			}
+        }
 
         if (Itr->Type != EUMCP_UriTemplateComponentType::VarList)
         {
@@ -220,25 +236,25 @@ bool FUMCP_UriTemplate::FindMatch(const FString& Uri, FUMCP_UriTemplateMatch& Ou
         }
 
         const auto& CurrentComponent = *Itr;
-        FStringView ExpressionToMatchThisComponent = UriRemaining;
         const auto RequiredPrefix = CurrentComponent.GetPrefixChar();
-
         if (RequiredPrefix != 0)
         {
-            if (ExpressionToMatchThisComponent.IsEmpty() || ExpressionToMatchThisComponent[0] != RequiredPrefix)
+            if (UriRemaining.IsEmpty() || UriRemaining[0] != RequiredPrefix)
             {
-                if (CurrentComponent.ExpressionOperator == TEXT('?') || CurrentComponent.ExpressionOperator == TEXT('&'))
-                {
-                    continue;
-                }
-                return false; 
+				switch (CurrentComponent.ExpressionOperator)
+				{
+					case TEXT('?'):
+					case TEXT('&'):
+						continue;
+					default:
+						return false;
+				}
             }
-            ExpressionToMatchThisComponent.RightChopInline(1); 
+            UriRemaining.RightChopInline(1);
         }
+    	
+        FStringView ExpressionToMatchThisComponent = UriRemaining;
 
-        FStringView NextComponentBoundaryMarker;
-        bool bNextComponentIsLiteral = false;
-        bool bFoundNextComponentBoundary = false;
         int32 CurrentMatchEndPosition = ExpressionToMatchThisComponent.Len();
 
         auto NextTemplateComponentItr = Itr + 1;
@@ -250,9 +266,6 @@ bool FUMCP_UriTemplate::FindMatch(const FString& Uri, FUMCP_UriTemplateMatch& Ou
                 if (BoundaryIdx != INDEX_NONE)
                 {
                     CurrentMatchEndPosition = BoundaryIdx;
-                    NextComponentBoundaryMarker = NextTemplateComponentItr->Literal;
-                    bNextComponentIsLiteral = true;
-                    bFoundNextComponentBoundary = true;
                 }
                 else if (!NextTemplateComponentItr->Literal.IsEmpty()) 
                 {
@@ -268,79 +281,49 @@ bool FUMCP_UriTemplate::FindMatch(const FString& Uri, FUMCP_UriTemplateMatch& Ou
                     if (ExpressionToMatchThisComponent.FindChar(NextExpressionPrefixChar, NextExpressionStartPosInCurrentMatch))
                     {
                         CurrentMatchEndPosition = NextExpressionStartPosInCurrentMatch;
-                        NextComponentBoundaryMarker = ExpressionToMatchThisComponent.Mid(NextExpressionStartPosInCurrentMatch, 1);
-                        bFoundNextComponentBoundary = true;
                     }
                 }
             }
         }
-        
+
         ExpressionToMatchThisComponent = ExpressionToMatchThisComponent.Left(CurrentMatchEndPosition);
 
-        if (CurrentComponent.VarSpecs.Num() == 1)
-        {
-            const auto& VarSpec = CurrentComponent.VarSpecs[0];
-            if (VarSpec.Type == EUMCP_UriTemplateComponentVarSpecType::Normal && VarSpec.MaxLength == 0)
-            {
-                if (!ExpressionToMatchThisComponent.IsEmpty())
-                {
-                    OutMatch.Variables.FindOrAdd(VarSpec.Val).Add(FString(ExpressionToMatchThisComponent));
-                }
-                else 
-                {
-                    OutMatch.Variables.FindOrAdd(VarSpec.Val).Add(FString());
-                }
-                
-                UriRemaining.RightChopInline(CurrentMatchEndPosition); 
-                
-                if (bFoundNextComponentBoundary)
-                {
-                    if (bNextComponentIsLiteral) {
-                         if (UriRemaining.StartsWith(NextComponentBoundaryMarker)) {
-                            UriRemaining.RightChopInline(NextComponentBoundaryMarker.Len());
-                        } else {
-                            return false;
-                        }
-                    }
-                    Itr++; 
-                }
-                continue; 
-            }
-        }
+    	TArray<FString> MatchedVars;
+		UE::String::ParseTokens(ExpressionToMatchThisComponent, CurrentComponent.GetSeparatorChar(),
+			[&MatchedVars](FStringView Token) { MatchedVars.Emplace(Token); });
 
-        if (CurrentComponent.VarSpecs.Num() > 0) {
-            if (CurrentComponent.ExpressionOperator == 0 || CurrentComponent.ExpressionOperator == TEXT('/') || CurrentComponent.ExpressionOperator == TEXT('.')) {
-                if (CurrentComponent.VarSpecs.Num() == 1 && !ExpressionToMatchThisComponent.IsEmpty()) {
-                     OutMatch.Variables.FindOrAdd(CurrentComponent.VarSpecs[0].Val).Add(FString(ExpressionToMatchThisComponent));
-                } else if (CurrentComponent.VarSpecs.Num() > 0) {
-                     return false;
-                }
-            } else {
-                return false; 
-            }
-        }
+    	for (auto VarItr = MatchedVars.CreateConstIterator(); VarItr; ++VarItr)
+    	{
+    		FString VarName, VarValue;
+    		const bool bIsNamed = (*VarItr).Split(TEXT("="), &VarName, &VarValue, ESearchCase::Type::CaseSensitive);
+    		if (bIsNamed)
+    		{
+    			const FUMCP_UriTemplateComponentVarSpec* VarSpec = CurrentComponent.VarSpecs.FindByPredicate([&VarName](const FUMCP_UriTemplateComponentVarSpec& VarSpec)
+    			{
+    				return VarSpec.Val == VarName;
+    			});
+    			if (!VarSpec)
+    			{
+    				return false;
+    			}
+
+    			// TODO
+    			return false;
+    		}
+
+    		if (!CurrentComponent.VarSpecs.IsValidIndex(VarItr.GetIndex()))
+    		{
+    			return false;
+    		}
+
+    		const auto& VarSpec = CurrentComponent.VarSpecs[VarItr.GetIndex()];
+    		OutMatch.Variables.FindOrAdd(VarSpec.Val).Add(FPlatformHttp::UrlDecode(*VarItr));
+    	}
 
         UriRemaining.RightChopInline(CurrentMatchEndPosition); 
-
-        if (bFoundNextComponentBoundary)
-        {
-            if (bNextComponentIsLiteral) {
-                if (UriRemaining.StartsWith(NextComponentBoundaryMarker)) {
-                    UriRemaining.RightChopInline(NextComponentBoundaryMarker.Len());
-                } else {
-                    return false; 
-                }
-            }
-            Itr++; 
-        }
     } 
 
-    if (!UriRemaining.IsEmpty())
-    {
-        return false;
-    }
-
-    return true;
+    return UriRemaining.IsEmpty();
 }
 
 FString FUMCP_UriTemplate::Expand(const TMap<FString, TArray<FString>>& Values) const

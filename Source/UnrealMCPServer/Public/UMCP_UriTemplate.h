@@ -35,6 +35,7 @@ struct FUMCP_UriTemplateComponent
 
 	FString::ElementType GetPrefixChar() const;
 	FString::ElementType GetSeparatorChar() const;
+	bool AllowsNamedVars() const;
 
 	static void FromLiteral(FString Literal, FUMCP_UriTemplateComponent& OutComp, FString& OutError);
 	static void FromVarList(FString VarList, FUMCP_UriTemplateComponent& OutComp, FString& OutError);

@@ -6,6 +6,7 @@
 #include "HttpServerResponse.h"
 #include "IHttpRouter.h"
 #include "UMCP_Types.h"
+#include "UMCP_UriTemplate.h"
 
 // Forward declarations for JSON types (used in helpers)
 struct FUMCP_JsonRpcResponse;
@@ -43,13 +44,11 @@ private:
 	bool Rpc_ResourcesTemplatesList(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError);
 	bool Rpc_ResourcesRead(const FUMCP_JsonRpcRequest& Request, TSharedPtr<FJsonObject> OutSuccess, FUMCP_JsonRpcError& OutError);
 
-	bool UriMatchesUriTemplate(const FString& Uri, const FString& UriTemplate) const;
-    
     TSharedPtr<IHttpRouter> HttpRouter;
     uint32 HttpServerPort = 30069;
 	TMap<FString, UMCP_JsonRpcHandler> JsonRpcMethodHandlers;
     FHttpRouteHandle RouteHandle_MCPStreamableHTTP;
 	TMap<FString, FUMCP_ToolDefinition> Tools;
 	TMap<FString, FUMCP_ResourceDefinition> Resources;
-	TArray<FUMCP_ResourceTemplateDefinition> ResourceTemplates;
+	TArray<TPair<FUMCP_UriTemplate, FUMCP_ResourceTemplateDefinition>> ResourceTemplates;
 };
