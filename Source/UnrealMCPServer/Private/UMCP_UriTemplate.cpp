@@ -4,7 +4,6 @@
 #include "String/ParseTokens.h"
 #include "PlatformHttp.h"
 
-
 FString::ElementType FUMCP_UriTemplateComponent::GetPrefixChar() const
 {
 	switch (ExpressionOperator)

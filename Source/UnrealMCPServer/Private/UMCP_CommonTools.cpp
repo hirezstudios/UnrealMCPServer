@@ -62,7 +62,7 @@ bool FUMCP_CommonTools::ExportBlueprintToT3D(TSharedPtr<FJsonObject> arguments, 
 	}
 
 	FStringOutputDevice OutputDevice;
-	const uint32 ExportFlags = PPF_Copy | PPF_ExportsNotFullyQualified; 
+	const uint32 ExportFlags = PPF_Copy | PPF_ExportsNotFullyQualified;
 	UE_LOG(LogUnrealMCPServer, Log, TEXT("Attempting to export Blueprint '%s' to T3D format using exporter: %s"), *BlueprintPath, *Exporter->GetClass()->GetName());
 	Exporter->ExportText(nullptr, Blueprint, TEXT("T3D"), OutputDevice, GWarn, ExportFlags);
 	if (OutputDevice.IsEmpty())

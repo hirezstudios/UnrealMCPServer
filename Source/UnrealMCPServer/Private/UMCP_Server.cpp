@@ -444,9 +444,3 @@ bool FUMCP_Server::Rpc_ResourcesRead(const FUMCP_JsonRpcRequest& Request, TShare
 	OutError.message = TEXT("Resource not found");
 	return false;
 }
-
-bool FUMCP_Server::UriMatchesUriTemplate(const FString& Uri, const FString& UriTemplate) const
-{
-	//TODO implement a proper URI template comparator
-	return false;
-}
