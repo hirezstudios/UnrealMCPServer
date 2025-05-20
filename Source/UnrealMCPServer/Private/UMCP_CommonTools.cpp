@@ -5,6 +5,24 @@
 #include "Exporters/Exporter.h"
 
 
+namespace
+{
+	TSharedPtr<FJsonObject> FromJsonStr(const FString& Str)
+	{
+		TSharedPtr<FJsonObject> RootJsonObject;
+		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Str);
+
+		if (!FJsonSerializer::Deserialize(Reader, RootJsonObject) || !RootJsonObject.IsValid())
+		{
+			UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Failed to deserialize JsonString. String: %s"), *Str);
+			return RootJsonObject;
+		}
+
+		return nullptr;
+	}
+}
+
+
 void FUMCP_CommonTools::Register(class FUMCP_Server* Server)
 {
 	{
@@ -12,25 +30,17 @@ void FUMCP_CommonTools::Register(class FUMCP_Server* Server)
 		Tool.name = TEXT("export_blueprint_to_t3d");
 		Tool.description = TEXT("Export a blueprint's contents to T3D format.");
 		Tool.DoToolCall.BindRaw(this, &FUMCP_CommonTools::ExportBlueprintToT3D);
-
-		// Input schema
-		{
-			Tool.inputSchema->SetStringField(TEXT("type"), TEXT("object"));
-			
-			TSharedPtr<FJsonObject> Properties = MakeShared<FJsonObject>();
-			{
-				TSharedPtr<FJsonObject> Property = MakeShared<FJsonObject>();
-				Property->SetStringField(TEXT("name"), TEXT("BlueprintPath"));
-				Property->SetStringField(TEXT("description"), TEXT("The path to the blueprint to export."));
-				Property->SetStringField(TEXT("type"), TEXT("string"));
-				Properties->SetObjectField(TEXT("BlueprintPath"), MoveTemp(Property));
-			}
-			Tool.inputSchema->SetObjectField(TEXT("properties"), MoveTemp(Properties));
-
-			TArray<TSharedPtr<FJsonValue>> Required;
-			Required.Add(MakeShared<FJsonValueString>(TEXT("BlueprintPath")));
-			Tool.inputSchema->SetArrayField(TEXT("required"), MoveTemp(Required));
-		}
+		Tool.inputSchema = FromJsonStr(TEXT(R"({
+			"type": "object",
+			"properties": {
+				"BlueprintPath": {
+					"name": "BlueprintPath",
+					"description": "The path to the blueprint to export",
+					"type": "string"
+				}
+			},
+			"required": ["BlueprintPath"]
+		})"));
 		Server->RegisterTool(MoveTemp(Tool));
 	}
 }
