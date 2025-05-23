@@ -43,6 +43,25 @@ void FUMCP_CommonTools::Register(class FUMCP_Server* Server)
 		})"));
 		Server->RegisterTool(MoveTemp(Tool));
 	}
+	
+	// {
+	//   	FUMCP_ToolDefinition Tool;
+	//   	Tool.name = TEXT("some_cool_tool_name_here");
+	//   	Tool.description = TEXT("Simple description of what the tool does");
+	//   	Tool.DoToolCall.BindRaw(this, &FUMCP_CommonTools::FunctionToExecuteTheTool);
+	//   	Tool.inputSchema = FromJsonStr(TEXT(R"({
+	//   		"type": "object",
+	//   		"properties": {
+	//   			"FirstParameterThatTheToolAccepts": {
+	//   				"name": "FirstParameterThatTheToolAccepts",
+	//   				"description": "description of what the parameter is used for with the tool",
+	//   				"type": "string"
+	//   			}
+	//   		},
+	//   		"required": ["FirstParameterThatTheToolAccepts"]
+	//   	})"));
+	//   	Server->RegisterTool(MoveTemp(Tool));
+	// }
 }
 
 bool FUMCP_CommonTools::ExportBlueprintToT3D(TSharedPtr<FJsonObject> arguments, TArray<FUMCP_CallToolResultContent>& OutContent)
