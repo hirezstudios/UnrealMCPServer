@@ -3,8 +3,8 @@
 #include "CoreMinimal.h"
 #include "Dom/JsonObject.h"
 #include "Templates/SharedPointer.h"
-#include "JsonUtilities.h" // For FJsonObjectConverter
-#include "Serialization/JsonSerializer.h" // For FJsonSerializer
+#include "JsonUtilities.h"
+#include "Serialization/JsonSerializer.h"
 #include "UMCP_UriTemplate.h"
 #include "UMCP_Types.generated.h"
 
@@ -251,11 +251,11 @@ struct FUMCP_CallToolParams
 };
 
 template<>
-bool UMCP_CreateFromJsonObject<FUMCP_CallToolParams>(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_CallToolParams& OutStruct, bool bAllowMissingObject)
+FORCEINLINE bool UMCP_CreateFromJsonObject<FUMCP_CallToolParams>(const TSharedPtr<FJsonObject>& JsonObject, FUMCP_CallToolParams& OutStruct, bool bAllowMissingObject)
 {
 	if (!JsonObject.IsValid()) return bAllowMissingObject;
-	OutStruct.name = JsonObject->GetStringField("name");
-	OutStruct.arguments = JsonObject->GetObjectField("arguments");
+	OutStruct.name = JsonObject->GetStringField(TEXT("name"));
+	OutStruct.arguments = JsonObject->GetObjectField(TEXT("arguments"));
 	return true;
 }
 
@@ -300,7 +300,7 @@ struct FUMCP_ListToolsParams
 	FString cursor;
 };
 
-UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
+DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ToolCall, TSharedPtr<FJsonObject> /* arguments */, TArray<FUMCP_CallToolResultContent>& /* OutContent */);
 
 USTRUCT()
 struct UNREALMCPSERVER_API FUMCP_ToolDefinition
@@ -379,7 +379,7 @@ struct FUMCP_ListResourcesParams
 	FString cursor;
 };
 
-UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ResourceRead, const FString& /* Uri */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
+DECLARE_DELEGATE_RetVal_TwoParams(bool, FUMCP_ResourceRead, const FString& /* Uri */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
 
 USTRUCT()
 struct UNREALMCPSERVER_API FUMCP_ResourceDefinition
@@ -426,7 +426,7 @@ struct FUMCP_ListResourceTemplatesParams
 	FString cursor;
 };
 
-UNREALMCPSERVER_API DECLARE_DELEGATE_RetVal_ThreeParams(bool, FUMCP_ResourceTemplateRead, const FUMCP_UriTemplate& /* Template */, const FUMCP_UriTemplateMatch& /* UriMatch */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
+DECLARE_DELEGATE_RetVal_ThreeParams(bool, FUMCP_ResourceTemplateRead, const FUMCP_UriTemplate& /* Template */, const FUMCP_UriTemplateMatch& /* UriMatch */, TArray<FUMCP_ReadResourceResultContent>& /* OutContent */);
 
 USTRUCT()
 struct FUMCP_ResourceTemplateDefinition

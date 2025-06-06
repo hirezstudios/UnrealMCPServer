@@ -15,10 +15,10 @@ namespace
 		if (!FJsonSerializer::Deserialize(Reader, RootJsonObject) || !RootJsonObject.IsValid())
 		{
 			UE_LOG(LogTemp, Error, TEXT("FJsonRpcRequest::CreateFromJsonString: Failed to deserialize JsonString. String: %s"), *Str);
-			return RootJsonObject;
+			return nullptr;
 		}
 
-		return nullptr;
+		return RootJsonObject;
 	}
 }
 
@@ -69,7 +69,7 @@ bool FUMCP_CommonTools::ExportBlueprintToT3D(TSharedPtr<FJsonObject> arguments, 
 	auto& Content = OutContent.Add_GetRef(FUMCP_CallToolResultContent());
 	Content.type = TEXT("text");
 
-	FString BlueprintPath = arguments->GetStringField("BlueprintPath");
+	FString BlueprintPath = arguments->GetStringField(TEXT("BlueprintPath"));
 	if (BlueprintPath.IsEmpty())
 	{
 		Content.text = TEXT("Missing BlueprintPath parameter.");

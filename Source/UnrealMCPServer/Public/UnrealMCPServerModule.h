@@ -1,6 +1,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UMCP_Server.h"
+#include "UMCP_CommonTools.h"
+#include "UMCP_CommonResources.h"
 #include "Modules/ModuleManager.h"
 
 // Define a log category
@@ -13,7 +16,7 @@ public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 private:
-	TUniquePtr<class FUMCP_Server> Server;
-	TUniquePtr<class FUMCP_CommonTools> CommonTools;
-	TUniquePtr<class FUMCP_CommonResources> CommonResources;
+	TUniquePtr<FUMCP_Server> Server;
+	TUniquePtr<FUMCP_CommonTools> CommonTools;
+	TUniquePtr<FUMCP_CommonResources> CommonResources;
 };

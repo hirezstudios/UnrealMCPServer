@@ -51,4 +51,6 @@ private:
 	TMap<FString, FUMCP_ToolDefinition> Tools;
 	TMap<FString, FUMCP_ResourceDefinition> Resources;
 	TArray<TPair<FUMCP_UriTemplate, FUMCP_ResourceTemplateDefinition>> ResourceTemplates;
+
+	friend class MCPServerRequestHandlerTask;
 };
