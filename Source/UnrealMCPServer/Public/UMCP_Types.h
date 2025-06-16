@@ -288,7 +288,7 @@ struct FUMCP_CallToolResult
 	TArray<FUMCP_CallToolResultContent> content;
 
 	UPROPERTY()
-	bool isError;
+	bool isError = false;
 };
 
 USTRUCT()
@@ -400,7 +400,7 @@ struct UNREALMCPSERVER_API FUMCP_ResourceDefinition
 
 	// Part of the spec, but we don't need it for templated resources
 	UPROPERTY()
-	int32 size;
+	int32 size = 0;
 
 	FUMCP_ResourceRead ReadResource;
 };

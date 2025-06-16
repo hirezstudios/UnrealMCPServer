@@ -38,7 +38,9 @@ public class UnrealMCPServer : ModuleRules
 				"HTTPServer", // For HTTP server functionalities
 				"Json", // For FJsonObject
 				"JsonUtilities", // For FJsonObjectConverter
-				"HTTP"
+				"HTTP",
+				"AssetRegistry", // For Blueprint search functionality
+				"BlueprintGraph" // For Blueprint graph analysis
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

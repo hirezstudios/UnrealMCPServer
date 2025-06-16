@@ -13,34 +13,11 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Engine/Engine.h"
+#include "Async/Async.h"
 
 
 const FString FUMCP_Server::MCP_PROTOCOL_VERSION = TEXT("2024-11-05");//TEXT("2025-03-26");
 const FString FUMCP_Server::PLUGIN_VERSION = TEXT("0.1.0");
-
-class MCPServerRequestHandlerTask : public FNonAbandonableTask
-{
-public:
-	MCPServerRequestHandlerTask(FUMCP_Server* InServer, const FHttpServerRequest& InRequest, const FHttpResultCallback& InOnComplete)
-		: Server(InServer), Request(InRequest), OnComplete(InOnComplete)
-	{}
-
-	void DoWork()
-	{
-		Server->HandleStreamableHTTPMCPRequest(Request, OnComplete);
-	}
-	
-	
-	FORCEINLINE TStatId GetStatId() const
-	{
-		RETURN_QUICK_DECLARE_CYCLE_STAT(MCPServerRequestHandlerTask, STATGROUP_ThreadPoolAsyncTasks);
-	}
-
-private:
-	FUMCP_Server* Server;
-	FHttpServerRequest Request;
-	FHttpResultCallback OnComplete;
-};
 
 void FUMCP_Server::StartServer()
 {
@@ -58,7 +35,9 @@ void FUMCP_Server::StartServer()
 #endif
 			[this](const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete) -> bool
 			{
-				(new FAutoDeleteAsyncTask<MCPServerRequestHandlerTask>(this, Request, OnComplete))->StartBackgroundTask();
+				AsyncTask(ENamedThreads::GameThread, [this, Request, OnComplete]() {
+					this->HandleStreamableHTTPMCPRequest(Request, OnComplete);
+				});
 				return true;
 			}
 #if (ENGINE_MAJOR_VERSION == (5) && ENGINE_MINOR_VERSION >= (5))
