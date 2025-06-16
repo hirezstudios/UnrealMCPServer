@@ -1,8 +1,8 @@
-# Technical Specification: HiRezMCPUnreal Plugin
+# Technical Specification: UnrealMCPServer Plugin
 
 ## 1. Overview
 
-The HiRezMCPUnreal plugin will implement a Model Context Protocol (MCP) server within the Unreal Engine Editor. It will allow AI agents to interact with the Unreal Engine environment by exposing HTTP endpoints according to the MCP specification (2025-03-26).
+The UnrealMCPServer plugin will implement a Model Context Protocol (MCP) server within the Unreal Engine Editor. It will allow AI agents to interact with the Unreal Engine environment by exposing HTTP endpoints according to the MCP specification (2025-03-26).
 
 **Key Requirements:**
 
@@ -16,7 +16,7 @@ The HiRezMCPUnreal plugin will implement a Model Context Protocol (MCP) server w
 
 ## 2. Core Modules and Classes
 
-### 2.1. `FHiRezMCPUnrealModule` (Module Core)
+### 2.1. `FUnrealMCPServerModule` (Module Core)
 
 *   **Responsibilities:**
     *   Implements `IModuleInterface`.
@@ -130,7 +130,7 @@ For the initial implementation, the server will focus on basic request/response.
 ## 4. HTTP Server Setup
 
 *   Utilize `FHttpServerModule` from Unreal Engine.
-*   Bind routes in `FHiRezMCPUnrealModule::StartupModule`.
+*   Bind routes in `FUnrealMCPServerModule::StartupModule`.
 *   Ensure proper error handling and HTTP status codes.
 
 ## 5. JSON Handling

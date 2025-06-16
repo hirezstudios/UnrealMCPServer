@@ -1,4 +1,4 @@
-# Technical Specification: HiRezMCPUnreal - MCP Server (Streamable HTTP Implementation)
+# Technical Specification: UnrealMCPServer - MCP Server (Streamable HTTP Implementation)
 
 **Version:** 1.0
 **Date:** 2025-05-09
@@ -6,7 +6,7 @@
 
 ## 1. Introduction
 
-This document outlines the technical specification for implementing a Model Context Protocol (MCP) Server within the `HiRezMCPUnreal` Unreal Engine plugin. This implementation will adhere to the MCP standard, utilizing Streamable HTTP for primary communication.
+This document outlines the technical specification for implementing a Model Context Protocol (MCP) Server within the `UnrealMCPServer` Unreal Engine plugin. This implementation will adhere to the MCP standard, utilizing Streamable HTTP for primary communication.
 
 The goal is to expose Unreal Engine capabilities (assets, editor functions, game state) as MCP Tools, Resources, and Prompts, enabling external AI models and applications to interact with the Unreal Engine environment in a standardized way.
 
@@ -16,7 +16,7 @@ This specification supersedes previous designs that may have focused on raw TCP 
 
 ### 2.1. Server Component
 
-The MCP Server will be implemented as part of an Unreal Engine plugin (`HiRezMCPUnreal`). It will run within the Unreal Editor or a packaged game instance.
+The MCP Server will be implemented as part of an Unreal Engine plugin (`UnrealMCPServer`). It will run within the Unreal Editor or a packaged game instance.
 
 *   **Plugin Module:** The core server logic will reside in a dedicated plugin module (e.g., `HiRezMCPServerModule`).
 *   **Lifecycle Management:** The server will start when the plugin module loads (or on-demand via a console command/editor button) and shut down gracefully when the module unloads or the engine exits.
